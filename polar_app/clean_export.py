@@ -13,6 +13,7 @@ from polar_app.rr_pipeline import RRCleaningParams, RRCleaningResult, analyze_rr
 
 FC_CLEAN_WINDOW_BEATS = 5
 FC_CLEAN_MIN_VIABLE_POINTS = 2
+RR_CLEAN_ALGO_VERSION = "3.0"
 
 
 def _session_start(session: ProcessedSession) -> datetime:
@@ -40,6 +41,7 @@ def build_rr_clean_export(session: ProcessedSession, result: RRCleaningResult) -
     cleaned["t_offset_clean_ms"] = ((cleaned["timestamp"] - start_dt).dt.total_seconds() * 1000.0).round()
     cleaned["session_id"] = session.session_id
     cleaned["session_start_ts"] = start_dt.isoformat()
+    cleaned["cleaning_algo_version"] = RR_CLEAN_ALGO_VERSION
     cleaned["display_rr_ms"] = cleaned["rr_interval_ms"].astype("float64")
 
     ordered_columns = [
@@ -51,6 +53,7 @@ def build_rr_clean_export(session: ProcessedSession, result: RRCleaningResult) -
         "display_rr_ms",
         "label",
         "run_flag",
+        "run_series_flag",
         "deco_flag",
         "correction_flag",
         "segment_final_id",
@@ -66,6 +69,7 @@ def build_rr_clean_export(session: ProcessedSession, result: RRCleaningResult) -
         "source_index_end",
         "timeline_step_ms",
         "session_start_ts",
+        "cleaning_algo_version",
     ]
     return cleaned[[column for column in ordered_columns if column in cleaned.columns]].copy()
 
@@ -116,6 +120,7 @@ def export_clean_result(repository: ProcessedSessionRepository, session: Process
         "non_viable_rr_total": int(result.non_viable_rr_total),
         "global_non_ok_rate": float(result.global_non_ok_rate),
         "global_quality_label": result.global_quality_label,
+        "cleaning_algo_version": RR_CLEAN_ALGO_VERSION,
         "params": asdict(params),
     }
     return repository.save_clean_export(session.session_id, rr_clean_frame, fc_clean_frame, clean_meta)

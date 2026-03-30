@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import PchipInterpolator
 
 ARTIFACT_LABELS = {
     "artefact_absolu",
@@ -145,8 +145,8 @@ def _interpolate_spline_value(
     y = rr_values[support_indices].astype(float)
 
     try:
-        cs = CubicSpline(x, y, bc_type="natural")
-        estimate = float(cs(float(target_idx)))
+        interpolator = PchipInterpolator(x, y)
+        estimate = float(interpolator(float(target_idx)))
     except (ValueError, ZeroDivisionError, np.linalg.LinAlgError):
         estimate = float(local_median)
 
@@ -535,7 +535,7 @@ def _analyze_support_segment(
                 neighbors=params.spline_neighbors,
                 local_median=median_local[idx],
             )
-            action = "interpolation_spline_cubique"
+            action = "interpolation_pchip"
             cleaned_rows_by_source[source_idx] = [
                 {
                     "rr_interval_ms": corrected_primary,

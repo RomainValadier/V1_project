@@ -88,9 +88,9 @@ def build_parameter_inputs(defaults: RRCleaningParams) -> RRCleaningParams:
         values["y_court"] = cols[2].number_input("Y_COURT", 2, 10, defaults.y_court, 1)
         values["tolerance_court"] = cols[3].number_input("TOLERANCE_COURT", 0, 5, defaults.tolerance_court, 1)
         values["y_moyen"] = cols[3].number_input("Y_MOYEN", 3, 15, defaults.y_moyen, 1)
+        values["tolerance_moyen"] = cols[0].number_input("TOLERANCE_MOYEN", 0, 6, defaults.tolerance_moyen, 1)
     with st.expander("Cassures et qualité", expanded=False):
         cols = st.columns(4)
-        values["tolerance_moyen"] = cols[0].number_input("TOLERANCE_MOYEN", 0, 6, defaults.tolerance_moyen, 1)
         values["chauffe_gap_court"] = cols[0].number_input("CHAUFFE_GAP_COURT", 1, 12, defaults.chauffe_gap_court, 1)
         values["chauffe_gap_long"] = cols[1].number_input("CHAUFFE_GAP_LONG", 1, 12, defaults.chauffe_gap_long, 1)
         values["seuil_gap_duree_ms"] = cols[1].number_input("SEUIL_GAP_DUREE_MS", 1000, 60000, defaults.seuil_gap_duree_ms, 1000)
@@ -117,24 +117,77 @@ def build_clean_chart(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, 
     chart["t_min"] = chart["timeline_step_ms"].cumsum() / 60000.0
     chart["line_group"] = chart["display_rr_ms"].isna().astype(int).cumsum()
     line_data = chart.loc[chart["display_rr_ms"].notna()].copy()
-    corrected = chart.loc[chart["correction_flag"].isin(["division", "fusion", "interpolation_cubique", "interpolation_lineaire"]) & chart["display_rr_ms"].notna()].copy()
+    corrected = chart.loc[chart["correction_flag"].isin(["division", "fusion", "interpolation_pchip", "interpolation_lineaire"]) & chart["display_rr_ms"].notna()].copy()
     excluded = chart.loc[chart["display_rr_ms"].isna()].copy()
     return line_data, corrected, excluded
 
 
-def build_dense_boxes(cleaned_frame: pd.DataFrame) -> pd.DataFrame:
+def build_dense_boxes(cleaned_frame: pd.DataFrame, dense_regions_frame: pd.DataFrame) -> pd.DataFrame:
+    if cleaned_frame.empty or dense_regions_frame.empty:
+        return pd.DataFrame()
+    chart = cleaned_frame.copy()
+    chart["timeline_step_ms"] = chart["timeline_step_ms"].fillna(0.0)
+    chart["t_min"] = chart["timeline_step_ms"].cumsum() / 60000.0
+    boxes: list[dict[str, float | int | str]] = []
+    fallback_padding = max(float(chart["timeline_step_ms"].replace(0, np.nan).dropna().median()) / 60000.0 if chart["timeline_step_ms"].replace(0, np.nan).notna().any() else 0.02, 0.02)
+    for row in dense_regions_frame.itertuples(index=False):
+        overlap = chart.loc[
+            (chart["source_index_start"].fillna(-1).astype(int) <= int(row.index_fin))
+            & (chart["source_index_end"].fillna(-1).astype(int) >= int(row.index_debut))
+        ].copy()
+        if overlap.empty:
+            continue
+        visible = overlap.loc[overlap["display_rr_ms"].notna()].copy()
+        target = visible if not visible.empty else overlap
+        x_start = float(target["t_min"].min())
+        x_end = float(target["t_min"].max())
+        if x_end <= x_start:
+            x_end = x_start + fallback_padding
+        y_values = visible["display_rr_ms"].astype(float) if not visible.empty else chart["display_rr_ms"].dropna().astype(float)
+        if y_values.empty:
+            continue
+        y_min = float(y_values.min()) - 45.0
+        y_max = float(y_values.max()) + 45.0
+        boxes.append({
+            "dense_region_id": int(row.dense_region_id),
+            "x_start": x_start - fallback_padding,
+            "x_end": x_end + fallback_padding,
+            "y_min": y_min,
+            "y_max": y_max,
+            "nb_points": int(row.nb_battements),
+            "nb_artefacts": int(row.nb_artefacts),
+            "densite_artefact_pct": float(row.densite_artefact_pct),
+        })
+    return pd.DataFrame(boxes)
+
+
+def build_dense_zone_summary(cleaned_frame: pd.DataFrame) -> pd.DataFrame:
     if cleaned_frame.empty or "dense_region_id" not in cleaned_frame.columns:
         return pd.DataFrame()
-    dense = cleaned_frame.loc[cleaned_frame["dense_region_id"].gt(0)].copy()
+    dense = cleaned_frame.loc[cleaned_frame["dense_region_id"].fillna(0).gt(0)].copy()
     if dense.empty:
         return pd.DataFrame()
-    dense["t_min"] = dense["timeline_step_ms"].fillna(0.0).cumsum() / 60000.0
-    boxes = dense.groupby("dense_region_id", as_index=False).agg(x_start=("t_min", "min"), x_end=("t_min", "max"), y_min=("display_rr_ms", "min"), y_max=("display_rr_ms", "max"), nb_points=("dense_region_id", "size"))
-    boxes["x_start"] -= 0.03
-    boxes["x_end"] += 0.03
-    boxes["y_min"] -= 45.0
-    boxes["y_max"] += 45.0
-    return boxes
+    dense["timeline_step_ms"] = dense["timeline_step_ms"].fillna(0.0)
+    dense["t_min"] = dense["timeline_step_ms"].cumsum() / 60000.0
+    dense["point_nettoye"] = dense["correction_flag"].isin(["division", "fusion", "interpolation_pchip", "interpolation_lineaire"])
+    rows: list[dict[str, object]] = []
+    for dense_region_id, group in dense.groupby("dense_region_id", sort=True):
+        corrections = sorted({value for value in group["correction_flag"].dropna().astype(str) if value not in {"ok", "not_cleaned"}})
+        segments = sorted({int(value) for value in group["segment_final_id"].dropna().astype(int)}) if "segment_final_id" in group.columns else []
+        start_min = float(group["t_min"].min())
+        end_min = float(group["t_min"].max())
+        duration_min = max(float(group["timeline_step_ms"].sum()) / 60000.0, end_min - start_min)
+        rows.append({
+            "dense_region_id": int(dense_region_id),
+            "debut_min": round(start_min, 2),
+            "fin_min": round(end_min, 2),
+            "duree_min": round(duration_min, 2),
+            "nb_points": int(len(group)),
+            "nb_points_nettoyes": int(group["point_nettoye"].sum()),
+            "segments": ", ".join(str(value) for value in segments) if segments else "-",
+            "corrections": ", ".join(corrections) if corrections else "aucune",
+        })
+    return pd.DataFrame(rows)
 
 
 def counts_frame(items: dict[str, int], label: str) -> pd.DataFrame:
@@ -189,7 +242,7 @@ def main() -> None:
     row2[5].metric("Qualité globale", result.global_quality_label)
     st.caption(f"Taux non-ok global : {result.global_non_ok_rate * 100:.2f}% | Taux de correction hors cassures : {result.correction_rate_outside_breaks * 100:.2f}%")
 
-    counts_col1, counts_col2, counts_col3, counts_col4 = st.columns(4)
+    counts_col1, counts_col2, counts_col3, counts_col4, counts_col5 = st.columns(5)
     with counts_col1:
         render_section_label("LABELS")
         st.dataframe(counts_frame(result.label_counts, "label"), use_container_width=True, hide_index=True)
@@ -197,29 +250,39 @@ def main() -> None:
         render_section_label("RUN_FLAGS")
         st.dataframe(counts_frame(result.run_flag_counts, "run_flag"), use_container_width=True, hide_index=True)
     with counts_col3:
+        render_section_label("RUN_SERIES")
+        st.dataframe(counts_frame(result.run_series_flag_counts, "run_series_flag"), use_container_width=True, hide_index=True)
+    with counts_col4:
         render_section_label("DECO_FLAGS")
         st.dataframe(counts_frame(result.deco_flag_counts, "deco_flag"), use_container_width=True, hide_index=True)
-    with counts_col4:
+    with counts_col5:
         render_section_label("CORRECTION_FLAGS")
         st.dataframe(counts_frame(result.correction_counts, "correction_flag"), use_container_width=True, hide_index=True)
 
-    info_col1, info_col2, info_col3 = st.columns(3)
+    info_col1, info_col2, info_col3, info_col4 = st.columns(4)
     with info_col1:
         render_section_label("Segments initiaux")
         st.dataframe(result.segments_frame, use_container_width=True, hide_index=True)
     with info_col2:
-        render_section_label("Qualité des segments")
+        render_section_label("Qualit? des segments")
         st.dataframe(result.quality_segments_frame, use_container_width=True, hide_index=True)
     with info_col3:
         render_section_label("Cassures")
         if result.breaks_frame.empty:
-            st.info("Aucune cassure détectée.")
+            st.info("Aucune cassure d?tect?e.")
         else:
             st.dataframe(result.breaks_frame, use_container_width=True, hide_index=True)
+    with info_col4:
+        render_section_label("Zones denses")
+        if result.dense_regions_frame.empty:
+            st.info("Aucune zone dense d?tect?e.")
+        else:
+            st.dataframe(result.dense_regions_frame, use_container_width=True, hide_index=True)
+
 
     raw_line, raw_artifacts = build_raw_chart(result.analysis_frame)
     clean_line, clean_corrected, clean_excluded = build_clean_chart(result.cleaned_frame)
-    dense_boxes = build_dense_boxes(result.cleaned_frame)
+    dense_boxes = build_dense_boxes(result.cleaned_frame, result.dense_regions_frame)
 
     artifact_scale = alt.Scale(domain=list(RAW_ARTIFACT_COLORS.keys()), range=list(RAW_ARTIFACT_COLORS.values()))
     raw_line_chart = alt.Chart(raw_line).mark_line(color="#94a3b8", strokeWidth=1.5).encode(
@@ -231,29 +294,48 @@ def main() -> None:
         x="t_min:Q",
         y="rr_plot_ms:Q",
         color=alt.Color("label:N", scale=artifact_scale, title="LABEL"),
-        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "run_flag:N", "deco_flag:N"],
+        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "run_flag:N", "run_series_flag:N", "deco_flag:N"],
     )
     clean_line_chart = alt.Chart(clean_line).mark_line(color="#2d5f43", strokeWidth=2.1).encode(
         x=alt.X("t_min:Q", title="Temps cumulé clean (min)"),
         y=alt.Y("display_rr_ms:Q", title="RR clean (ms)"),
         detail="line_group:N",
     )
+    present_corrections = [
+        method
+        for method in ["division", "fusion", "interpolation_pchip", "interpolation_lineaire"]
+        if method in clean_corrected["correction_flag"].astype(str).unique().tolist()
+    ]
+    correction_colors = {
+        "division": "#1d4ed8",
+        "fusion": "#b45309",
+        "interpolation_pchip": "#be123c",
+        "interpolation_lineaire": "#7c3aed",
+    }
     correction_scale = alt.Scale(
-        domain=["division", "fusion", "interpolation_cubique", "interpolation_lineaire"],
-        range=["#1d4ed8", "#b45309", "#c2410c", "#7c3aed"],
-    )
-    clean_corrected_chart = alt.Chart(clean_corrected).mark_circle(size=70, stroke="#ffffff", strokeWidth=1.1).encode(
+        domain=present_corrections,
+        range=[correction_colors[method] for method in present_corrections],
+    ) if present_corrections else alt.Scale(domain=["division"], range=["#1d4ed8"])
+    clean_corrected_chart = alt.Chart(clean_corrected).mark_point(filled=True, size=90, stroke="#ffffff", strokeWidth=1.2).encode(
         x="t_min:Q",
         y="display_rr_ms:Q",
         color=alt.Color("correction_flag:N", scale=correction_scale, title="Correction"),
-        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "run_flag:N", "correction_flag:N", "fc_ok:N", "hrr_ok:N", "rmssd_ok:N"],
+        shape=alt.Shape(
+            "correction_flag:N",
+            scale=alt.Scale(
+                domain=["division", "fusion", "interpolation_pchip", "interpolation_lineaire"],
+                range=["circle", "square", "diamond", "triangle-up"],
+            ),
+            title="Correction",
+        ),
+        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "run_flag:N", "run_series_flag:N", "correction_flag:N", "fc_ok:N", "hrr_ok:N", "rmssd_ok:N"],
     )
     clean_excluded_chart = alt.Chart(clean_excluded).mark_tick(thickness=2, size=18, color="#475569").encode(
         x="t_min:Q",
-        tooltip=["t_min:Q", "label:N", "run_flag:N", "correction_flag:N", "segment_status:N"],
+        tooltip=["t_min:Q", "label:N", "run_flag:N", "run_series_flag:N", "correction_flag:N", "segment_status:N"],
     )
     dense_outline = alt.Chart(dense_boxes).mark_rect(stroke="#0f766e", strokeWidth=3.0, strokeDash=[8, 4], color="#14b8a6", fillOpacity=0.10).encode(
-        x="x_start:Q", x2="x_end:Q", y="y_min:Q", y2="y_max:Q", tooltip=["dense_region_id:Q", "nb_points:Q"]
+        x="x_start:Q", x2="x_end:Q", y="y_min:Q", y2="y_max:Q", tooltip=["dense_region_id:Q", "nb_points:Q", "nb_artefacts:Q", "densite_artefact_pct:Q"]
     )
 
     chart_col1, chart_col2 = st.columns(2)
@@ -264,11 +346,12 @@ def main() -> None:
     with chart_col2:
         render_section_label("RR clean")
         st.altair_chart((dense_outline + clean_line_chart + clean_corrected_chart + clean_excluded_chart).properties(height=320).interactive(), use_container_width=True)
-        st.caption("Les zones denses run_serie sont encadr?es en vert d'eau et les points effectivement nettoy?s sont color?s selon la m?thode de correction.")
+        st.caption("Les zones denses run_serie sont encadr?es en vert d'eau. Les points nettoy?s visibles utilisent une couleur et une forme distinctes selon la m?thode de correction.")
 
-    render_section_label("Variables intermédiaires")
+
+    render_section_label("Variables interm?diaires")
     variable_columns = [
-        "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label_initial", "label", "run_flag",
+        "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label_initial", "label", "run_flag", "run_series_flag",
         "dRR_ms", "Th1_ms", "dRR_norm", "med_locale_ms", "mRR_brut_ms", "mRR_ms", "Th2_ms", "mRR_norm", "S21", "S22",
         "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw",
     ]
@@ -278,16 +361,16 @@ def main() -> None:
     table_col1, table_col2 = st.columns(2)
     with table_col1:
         render_section_label("Table RR bruts")
-        raw_columns = ["t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label", "run_flag", "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw"]
+        raw_columns = ["t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label", "run_flag", "run_series_flag", "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw"]
         raw_table = result.analysis_frame[raw_columns]
         st.dataframe(raw_table, use_container_width=True, height=340)
     with table_col2:
         render_section_label("Table RR clean")
         clean_table_source = result.cleaned_frame.assign(
-            point_nettoye=result.cleaned_frame["correction_flag"].isin(["division", "fusion", "interpolation_cubique", "interpolation_lineaire"]),
+            point_nettoye=result.cleaned_frame["correction_flag"].isin(["division", "fusion", "interpolation_pchip", "interpolation_lineaire"]),
             zone_dense_artefact=result.cleaned_frame["dense_region_id"].fillna(0).gt(0),
         )
-        clean_columns = ["cleaned_index", "rr_interval_ms", "label", "run_flag", "deco_flag", "correction_flag", "point_nettoye", "zone_dense_artefact", "fc_ok", "hrr_ok", "rmssd_ok", "segment_status", "quality_segment_label", "dense_region_id", "source_reference"]
+        clean_columns = ["cleaned_index", "rr_interval_ms", "label", "run_flag", "run_series_flag", "deco_flag", "correction_flag", "point_nettoye", "zone_dense_artefact", "fc_ok", "hrr_ok", "rmssd_ok", "segment_status", "quality_segment_label", "dense_region_id", "source_reference"]
         cleaned_table = clean_table_source[clean_columns] if show_full_tables else clean_table_source[clean_columns].head(700)
         st.dataframe(cleaned_table, use_container_width=True, height=340)
 
