@@ -1,0 +1,8 @@
+Retraitement pipeline RR : 2026-03-26T22:53:22.859211
+Session : 20260323_172758
+Jonctions conservees depuis raw/ :
+  20260323_172758 -> 20260323_181203 | 51s | reprocess_preserve_raw_group
+  20260323_181203 -> 20260323_181351 | 55s | reprocess_preserve_raw_group
+  20260323_181351 -> 20260323_181531 | 46s | reprocess_preserve_raw_group
+  20260323_181531 -> 20260323_182418 | 490s | reprocess_preserve_raw_group
+  20260323_182418 -> 20260323_190215 | 56s | reprocess_preserve_raw_group

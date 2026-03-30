@@ -1,0 +1,33 @@
+{
+  "session_id": "20260318_181330",
+  "device_id": "EBAF6822",
+  "date": "2026-03-18",
+  "heure_debut": "18:13:43",
+  "annotation": "Technique Club",
+  "fc_start_ts": "2026-03-18T18:13:43.063000",
+  "nb_battements_rr": 11220,
+  "nb_points_hr": 6101,
+  "duree_s": 6074.263,
+  "bpm_moyen": 111.8,
+  "bpm_min": 63,
+  "bpm_max": 152,
+  "rr_min_ms": 255,
+  "rr_max_ms": 7520,
+  "rr_filepath": "processed\\20260318_181330\\rr.parquet",
+  "hr_filepath": "processed\\20260318_181330\\hr.parquet",
+  "format_fichiers": "parquet",
+  "import_timestamp": "2026-03-26T22:53:20.782580",
+  "source_session_ids": [
+    "20260318_181343"
+  ],
+  "segments_count": 1,
+  "gaps_count": 0,
+  "gap_durations_s": [],
+  "duplicates_removed": 0,
+  "incomplete_segments": 0,
+  "import_mode": "pipeline_rr_v2",
+  "gap_reviews": [],
+  "rr_clean_filepath": "clean\\20260318_181330\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260318_181330\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-03-26T23:48:26.517699"
+}

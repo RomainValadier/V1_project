@@ -1,0 +1,18 @@
+=== ACTIVITE 002 ===
+Debut         : 2026-03-26 10:17:22
+Fin           : 2026-03-26 12:39:22
+Duree totale  : 2 h 21 min 59 s
+
+Segments fusionnes : 2
+  Segment 0 : 20260326_101711 | debut 10:17:22 | fin 11:21:17 | duree 1 h 03 min 55 s
+  Segment 1 : 20260326_112140 | debut 11:21:55 | fin 12:39:22 | duree 1 h 17 min 27 s
+
+Deconnexions fusionnees : 1
+  Gap 20260326_101711 -> 20260326_112140 | duree 37s | statut user_confirmed_merge
+
+Doublons detectes : 0
+
+Pipeline RR :
+  GAP : 107 (0.6 %)
+  OK : 18325 (99.3 %)
+  POST_RECONNECT_LONG : 23 (0.1 %)

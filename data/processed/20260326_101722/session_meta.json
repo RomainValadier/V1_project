@@ -1,0 +1,48 @@
+{
+  "session_id": "20260326_101722",
+  "device_id": "EBAF6822",
+  "date": "2026-03-26",
+  "heure_debut": "10:17:22",
+  "annotation": "Judo Insep",
+  "fc_start_ts": "2026-03-26T10:17:22.816000",
+  "nb_battements_rr": 18455,
+  "nb_points_hr": 8483,
+  "duree_s": 8519.217,
+  "bpm_moyen": 131.5,
+  "bpm_min": 63,
+  "bpm_max": 175,
+  "rr_min_ms": 253,
+  "rr_max_ms": 2058,
+  "rr_filepath": "processed\\20260326_101722\\rr.parquet",
+  "hr_filepath": "processed\\20260326_101722\\hr.parquet",
+  "format_fichiers": "parquet",
+  "import_timestamp": "2026-03-26T22:58:30.943710",
+  "source_session_ids": [
+    "20260326_101711",
+    "20260326_112140"
+  ],
+  "segments_count": 2,
+  "gaps_count": 1,
+  "gap_durations_s": [
+    37
+  ],
+  "duplicates_removed": 0,
+  "incomplete_segments": 0,
+  "import_mode": "pipeline_rr_v2",
+  "gap_reviews": [
+    {
+      "decision_key": "20260326_101711->20260326_112140",
+      "prev_session_id": "20260326_101711",
+      "next_session_id": "20260326_112140",
+      "gap_s": 37,
+      "status": "user_confirmed_merge",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-26T11:21:17.956000",
+      "start_next": "2026-03-26T11:21:55.078000"
+    }
+  ],
+  "rr_clean_filepath": "clean\\20260326_101722\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260326_101722\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-03-30T00:13:49.211095"
+}

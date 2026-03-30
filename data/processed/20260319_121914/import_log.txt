@@ -1,0 +1,14 @@
+=== ACTIVITE 001 ===
+Debut         : 2026-03-19 12:19:26
+Fin           : 2026-03-19 12:42:42
+Duree totale  : 23 min 15 s
+
+Segments fusionnes : 1
+  Segment 0 : 20260319_121926 | debut 12:19:26 | fin 12:42:42 | duree 23 min 15 s
+
+Deconnexions fusionnees : 0
+
+Doublons detectes : 0
+
+Pipeline RR :
+  OK : 2513 (100.0 %)

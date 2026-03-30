@@ -1,0 +1,113 @@
+{
+  "session_id": "20260324_162922",
+  "device_id": "EBAF6822",
+  "date": "2026-03-24",
+  "heure_debut": "16:29:22",
+  "annotation": "Judo Insep",
+  "fc_start_ts": "2026-03-24T16:29:22.481000",
+  "nb_battements_rr": 15820,
+  "nb_points_hr": 7007,
+  "duree_s": 7307.415,
+  "bpm_moyen": 133.8,
+  "bpm_min": 69,
+  "bpm_max": 175,
+  "rr_min_ms": 254,
+  "rr_max_ms": 5202,
+  "rr_filepath": "processed\\20260324_162922\\rr.parquet",
+  "hr_filepath": "processed\\20260324_162922\\hr.parquet",
+  "format_fichiers": "parquet",
+  "import_timestamp": "2026-03-26T22:53:23.721917",
+  "source_session_ids": [
+    "20260324_162922",
+    "20260324_174742",
+    "20260324_181858",
+    "20260324_182019",
+    "20260324_182149",
+    "20260324_182351",
+    "20260324_182732"
+  ],
+  "segments_count": 7,
+  "gaps_count": 6,
+  "gap_durations_s": [
+    29,
+    75,
+    39,
+    31,
+    72,
+    74
+  ],
+  "duplicates_removed": 0,
+  "incomplete_segments": 0,
+  "import_mode": "pipeline_rr_v2",
+  "gap_reviews": [
+    {
+      "decision_key": "20260324_162922->20260324_174742",
+      "prev_session_id": "20260324_162922",
+      "next_session_id": "20260324_174742",
+      "gap_s": 29,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": false,
+      "start_prev": "2026-03-24T17:47:13.477000",
+      "start_next": "2026-03-24T17:47:42.158000"
+    },
+    {
+      "decision_key": "20260324_174742->20260324_181858",
+      "prev_session_id": "20260324_174742",
+      "next_session_id": "20260324_181858",
+      "gap_s": 75,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-24T18:17:43.838000",
+      "start_next": "2026-03-24T18:18:58.489000"
+    },
+    {
+      "decision_key": "20260324_181858->20260324_182019",
+      "prev_session_id": "20260324_181858",
+      "next_session_id": "20260324_182019",
+      "gap_s": 39,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-24T18:19:40.947000",
+      "start_next": "2026-03-24T18:20:19.611000"
+    },
+    {
+      "decision_key": "20260324_182019->20260324_182149",
+      "prev_session_id": "20260324_182019",
+      "next_session_id": "20260324_182149",
+      "gap_s": 31,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-24T18:21:19.268000",
+      "start_next": "2026-03-24T18:21:49.857000"
+    },
+    {
+      "decision_key": "20260324_182149->20260324_182351",
+      "prev_session_id": "20260324_182149",
+      "next_session_id": "20260324_182351",
+      "gap_s": 72,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-24T18:22:39.805000",
+      "start_next": "2026-03-24T18:23:51.813000"
+    },
+    {
+      "decision_key": "20260324_182351->20260324_182732",
+      "prev_session_id": "20260324_182351",
+      "next_session_id": "20260324_182732",
+      "gap_s": 74,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-24T18:26:19.049000",
+      "start_next": "2026-03-24T18:27:32.567000"
+    }
+  ],
+  "rr_clean_filepath": "clean\\20260324_162922\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260324_162922\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-03-30T00:06:14.904753"
+}

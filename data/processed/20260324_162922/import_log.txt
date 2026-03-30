@@ -1,0 +1,29 @@
+=== ACTIVITE 001 ===
+Debut         : 2026-03-24 16:29:22
+Fin           : 2026-03-24 18:31:09
+Duree totale  : 2 h 01 min 47 s
+
+Segments fusionnes : 7
+  Segment 0 : 20260324_162922 | debut 16:29:22 | fin 17:47:13 | duree 1 h 17 min 51 s
+  Segment 1 : 20260324_174742 | debut 17:47:42 | fin 18:17:43 | duree 30 min 02 s
+  Segment 2 : 20260324_181858 | debut 18:18:58 | fin 18:19:40 | duree 0 min 42 s
+  Segment 3 : 20260324_182019 | debut 18:20:19 | fin 18:21:19 | duree 1 min 00 s
+  Segment 4 : 20260324_182149 | debut 18:21:49 | fin 18:22:39 | duree 0 min 50 s
+  Segment 5 : 20260324_182351 | debut 18:23:51 | fin 18:26:19 | duree 2 min 27 s
+  Segment 6 : 20260324_182732 | debut 18:27:32 | fin 18:31:09 | duree 3 min 37 s
+
+Deconnexions fusionnees : 6
+  Gap 20260324_162922 -> 20260324_174742 | duree 29s | statut reprocess_preserve_raw_group
+  Gap 20260324_174742 -> 20260324_181858 | duree 75s | statut reprocess_preserve_raw_group
+  Gap 20260324_181858 -> 20260324_182019 | duree 39s | statut reprocess_preserve_raw_group
+  Gap 20260324_182019 -> 20260324_182149 | duree 31s | statut reprocess_preserve_raw_group
+  Gap 20260324_182149 -> 20260324_182351 | duree 72s | statut reprocess_preserve_raw_group
+  Gap 20260324_182351 -> 20260324_182732 | duree 74s | statut reprocess_preserve_raw_group
+
+Doublons detectes : 0
+
+Pipeline RR :
+  GAP : 445 (2.8 %)
+  OK : 15303 (96.7 %)
+  POST_RECONNECT_LONG : 41 (0.3 %)
+  POST_RECONNECT_TRES_LONG : 31 (0.2 %)

@@ -1,0 +1,33 @@
+{
+  "session_id": "20260318_114705",
+  "device_id": "EBAF6822",
+  "date": "2026-03-18",
+  "heure_debut": "11:47:17",
+  "annotation": "20260318_114705",
+  "fc_start_ts": "2026-03-18T11:47:17.761000",
+  "nb_battements_rr": 6140,
+  "nb_points_hr": 2948,
+  "duree_s": 2888.702,
+  "bpm_moyen": 131.0,
+  "bpm_min": 59,
+  "bpm_max": 159,
+  "rr_min_ms": 254,
+  "rr_max_ms": 5722,
+  "rr_filepath": "processed\\20260318_114705\\rr.parquet",
+  "hr_filepath": "processed\\20260318_114705\\hr.parquet",
+  "format_fichiers": "parquet",
+  "import_timestamp": "2026-03-26T22:53:20.441497",
+  "source_session_ids": [
+    "20260318_114717"
+  ],
+  "segments_count": 1,
+  "gaps_count": 0,
+  "gap_durations_s": [],
+  "duplicates_removed": 0,
+  "incomplete_segments": 0,
+  "import_mode": "pipeline_rr_v2",
+  "gap_reviews": [],
+  "rr_clean_filepath": "clean\\20260318_114705\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260318_114705\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-03-26T23:48:03.106095"
+}

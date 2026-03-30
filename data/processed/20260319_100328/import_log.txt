@@ -1,0 +1,23 @@
+=== ACTIVITE 001 ===
+Debut         : 2026-03-19 10:03:28
+Fin           : 2026-03-19 12:10:41
+Duree totale  : 2 h 07 min 12 s
+
+Segments fusionnes : 4
+  Segment 0 : 20260319_100328 | debut 10:03:28 | fin 10:47:44 | duree 44 min 16 s
+  Segment 1 : 20260319_104844 | debut 10:48:44 | fin 10:48:51 | duree 0 min 07 s
+  Segment 2 : 20260319_104950 | debut 10:49:50 | fin 12:00:58 | duree 1 h 11 min 08 s
+  Segment 3 : 20260319_120238 | debut 12:02:38 | fin 12:10:41 | duree 8 min 02 s
+
+Deconnexions fusionnees : 3
+  Gap 20260319_100328 -> 20260319_104844 | duree 60s | statut reprocess_preserve_raw_group
+  Gap 20260319_104844 -> 20260319_104950 | duree 59s | statut reprocess_preserve_raw_group
+  Gap 20260319_104950 -> 20260319_120238 | duree 101s | statut reprocess_preserve_raw_group
+
+Doublons detectes : 0
+
+Pipeline RR :
+  GAP : 459 (2.8 %)
+  OK : 15624 (96.8 %)
+  POST_RECONNECT_LONG : 18 (0.1 %)
+  POST_RECONNECT_TRES_LONG : 32 (0.2 %)

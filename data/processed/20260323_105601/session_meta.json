@@ -1,0 +1,74 @@
+{
+  "session_id": "20260323_105601",
+  "device_id": "EBAF6822",
+  "date": "2026-03-23",
+  "heure_debut": "10:56:01",
+  "annotation": "Muscu , boxe ACBB",
+  "fc_start_ts": "2026-03-23T10:56:01.712000",
+  "nb_battements_rr": 7849,
+  "nb_points_hr": 3614,
+  "duree_s": 4292.719,
+  "bpm_moyen": 107.3,
+  "bpm_min": 76,
+  "bpm_max": 153,
+  "rr_min_ms": 257,
+  "rr_max_ms": 4646,
+  "rr_filepath": "processed\\20260323_105601\\rr.parquet",
+  "hr_filepath": "processed\\20260323_105601\\hr.parquet",
+  "format_fichiers": "parquet",
+  "import_timestamp": "2026-03-26T22:53:21.871210",
+  "source_session_ids": [
+    "20260323_105601",
+    "20260323_113146",
+    "20260323_113414",
+    "20260323_113641"
+  ],
+  "segments_count": 4,
+  "gaps_count": 3,
+  "gap_durations_s": [
+    694,
+    47,
+    53
+  ],
+  "duplicates_removed": 0,
+  "incomplete_segments": 0,
+  "import_mode": "pipeline_rr_v2",
+  "gap_reviews": [
+    {
+      "decision_key": "20260323_105601->20260323_113146",
+      "prev_session_id": "20260323_105601",
+      "next_session_id": "20260323_113146",
+      "gap_s": 694,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": false,
+      "start_prev": "2026-03-23T11:20:12.894000",
+      "start_next": "2026-03-23T11:31:46.875000"
+    },
+    {
+      "decision_key": "20260323_113146->20260323_113414",
+      "prev_session_id": "20260323_113146",
+      "next_session_id": "20260323_113414",
+      "gap_s": 47,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-23T11:33:27.470000",
+      "start_next": "2026-03-23T11:34:14.236000"
+    },
+    {
+      "decision_key": "20260323_113414->20260323_113641",
+      "prev_session_id": "20260323_113414",
+      "next_session_id": "20260323_113641",
+      "gap_s": 53,
+      "status": "reprocess_preserve_raw_group",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-23T11:35:48.907000",
+      "start_next": "2026-03-23T11:36:41.559000"
+    }
+  ],
+  "rr_clean_filepath": "clean\\20260323_105601\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260323_105601\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-03-26T23:49:43.265814"
+}
