@@ -11,9 +11,10 @@ from polar_app.models import ProcessedSession
 from polar_app.repository import ProcessedSessionRepository
 from polar_app.rr_pipeline import RRCleaningParams, RRCleaningResult, analyze_rr_artifacts
 
-FC_CLEAN_WINDOW_BEATS = 5
+FC_CLEAN_WINDOW_SECONDS = 5.0
 FC_CLEAN_MIN_VIABLE_POINTS = 2
-RR_CLEAN_ALGO_VERSION = "3.0"
+FC_CLEAN_WINDOW_MODE = "trailing_seconds"
+RR_CLEAN_ALGO_VERSION = "3.1"
 
 
 def _session_start(session: ProcessedSession) -> datetime:
@@ -74,17 +75,46 @@ def build_rr_clean_export(session: ProcessedSession, result: RRCleaningResult) -
     return cleaned[[column for column in ordered_columns if column in cleaned.columns]].copy()
 
 
-def build_fc_clean_export(rr_clean_frame: pd.DataFrame, window_beats: int = FC_CLEAN_WINDOW_BEATS, min_viable_points: int = FC_CLEAN_MIN_VIABLE_POINTS) -> pd.DataFrame:
+def build_fc_clean_export(
+    rr_clean_frame: pd.DataFrame,
+    window_seconds: float = FC_CLEAN_WINDOW_SECONDS,
+    min_viable_points: int = FC_CLEAN_MIN_VIABLE_POINTS,
+) -> pd.DataFrame:
     if rr_clean_frame.empty:
-        return pd.DataFrame(columns=["cleaned_index", "timestamp", "t_offset_clean_ms", "bpm_clean", "window_viable_points", "window_size_beats"])
+        return pd.DataFrame(
+            columns=[
+                "cleaned_index",
+                "timestamp",
+                "t_offset_clean_ms",
+                "bpm_clean",
+                "window_viable_points",
+                "window_duration_s",
+                "window_mode",
+                "window_start_ts",
+                "window_end_ts",
+            ]
+        )
 
-    half_window = window_beats // 2
+    frame = rr_clean_frame.copy()
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce")
     fc_rows: list[dict] = []
-    for idx in range(len(rr_clean_frame)):
-        start = max(0, idx - half_window)
-        end = min(len(rr_clean_frame), idx + half_window + 1)
-        window = rr_clean_frame.iloc[start:end]
-        viable = window.loc[window["fc_ok"].eq(True) & window["rr_interval_ms"].notna(), "rr_interval_ms"].astype("float64")
+    for idx in range(len(frame)):
+        center_ts = frame.iloc[idx]["timestamp"]
+        if pd.isna(center_ts):
+            viable = pd.Series(dtype="float64")
+            window_start_ts = pd.NaT
+            window_end_ts = pd.NaT
+        else:
+            window_end_ts = center_ts
+            window_start_ts = center_ts - pd.Timedelta(seconds=float(window_seconds))
+            window = frame.loc[
+                frame["timestamp"].between(window_start_ts, window_end_ts, inclusive="both")
+            ]
+            viable = window.loc[
+                window["fc_ok"].eq(True) & window["rr_interval_ms"].notna(),
+                "rr_interval_ms",
+            ].astype("float64")
+
         bpm_clean = np.nan
         if len(viable) >= min_viable_points:
             mean_rr = float(viable.mean())
@@ -92,15 +122,18 @@ def build_fc_clean_export(rr_clean_frame: pd.DataFrame, window_beats: int = FC_C
                 bpm_clean = 60000.0 / mean_rr
         fc_rows.append(
             {
-                "cleaned_index": int(rr_clean_frame.iloc[idx]["cleaned_index"]),
-                "timestamp": rr_clean_frame.iloc[idx]["timestamp"],
-                "t_offset_clean_ms": float(rr_clean_frame.iloc[idx]["t_offset_clean_ms"]),
+                "cleaned_index": int(frame.iloc[idx]["cleaned_index"]),
+                "timestamp": frame.iloc[idx]["timestamp"],
+                "t_offset_clean_ms": float(frame.iloc[idx]["t_offset_clean_ms"]),
                 "bpm_clean": bpm_clean,
                 "window_viable_points": int(len(viable)),
-                "window_size_beats": int(window_beats),
-                "center_fc_ok": bool(rr_clean_frame.iloc[idx].get("fc_ok", False)),
-                "center_hrr_ok": bool(rr_clean_frame.iloc[idx].get("hrr_ok", False)),
-                "center_rmssd_ok": bool(rr_clean_frame.iloc[idx].get("rmssd_ok", False)),
+                "window_duration_s": float(window_seconds),
+                "window_mode": FC_CLEAN_WINDOW_MODE,
+                "window_start_ts": window_start_ts,
+                "window_end_ts": window_end_ts,
+                "center_fc_ok": bool(frame.iloc[idx].get("fc_ok", False)),
+                "center_hrr_ok": bool(frame.iloc[idx].get("hrr_ok", False)),
+                "center_rmssd_ok": bool(frame.iloc[idx].get("rmssd_ok", False)),
             }
         )
     return pd.DataFrame(fc_rows)
@@ -114,7 +147,8 @@ def export_clean_result(repository: ProcessedSessionRepository, session: Process
         "source_rr_filepath": session.rr_filepath,
         "source_hr_filepath": session.hr_filepath,
         "export_timestamp": datetime.now().isoformat(),
-        "fc_clean_window_beats": FC_CLEAN_WINDOW_BEATS,
+        "fc_clean_window_seconds": FC_CLEAN_WINDOW_SECONDS,
+        "fc_clean_window_mode": FC_CLEAN_WINDOW_MODE,
         "fc_clean_min_viable_points": FC_CLEAN_MIN_VIABLE_POINTS,
         "ok_rr_total": int(result.ok_rr_total),
         "non_viable_rr_total": int(result.non_viable_rr_total),

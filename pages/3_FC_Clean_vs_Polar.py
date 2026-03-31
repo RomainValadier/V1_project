@@ -8,10 +8,15 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from polar_app.clean_export import FC_CLEAN_MIN_VIABLE_POINTS, FC_CLEAN_WINDOW_BEATS
+from polar_app.clean_export import (
+    FC_CLEAN_MIN_VIABLE_POINTS,
+    FC_CLEAN_WINDOW_MODE,
+    FC_CLEAN_WINDOW_SECONDS,
+)
 from polar_app.repository import ProcessedSessionRepository
 
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+COMPARISON_MATCH_TOLERANCE_SECONDS = 1.0
 
 
 def inject_styles() -> None:
@@ -99,13 +104,17 @@ def ensure_fc_clean_columns(fc_clean_frame: pd.DataFrame) -> pd.DataFrame:
         return frame
     for column, default in {
         "window_viable_points": pd.NA,
-        "window_size_beats": pd.NA,
+        "window_duration_s": FC_CLEAN_WINDOW_SECONDS,
+        "window_mode": FC_CLEAN_WINDOW_MODE,
         "center_fc_ok": False,
         "center_hrr_ok": False,
         "center_rmssd_ok": False,
     }.items():
         if column not in frame.columns:
             frame[column] = default
+    for column in ("window_start_ts", "window_end_ts"):
+        if column not in frame.columns:
+            frame[column] = pd.NaT
     return frame
 
 
@@ -113,7 +122,7 @@ def build_rr_clean_chart_frame(rr_clean_frame: pd.DataFrame) -> pd.DataFrame:
     chart = rr_clean_frame.copy()
     if chart.empty:
         return chart
-    chart["timestamp"] = pd.to_datetime(chart["timestamp"])
+    chart["timestamp"] = pd.to_datetime(chart["timestamp"], errors="coerce")
     chart["display_rr_ms"] = np.where(chart["fc_ok"].eq(True), chart["rr_interval_ms"], np.nan)
     chart["line_group"] = chart["display_rr_ms"].isna().astype(int).cumsum()
     return chart
@@ -123,7 +132,7 @@ def build_fc_clean_chart_frame(fc_clean_frame: pd.DataFrame) -> pd.DataFrame:
     chart = fc_clean_frame.copy()
     if chart.empty:
         return chart
-    chart["timestamp"] = pd.to_datetime(chart["timestamp"])
+    chart["timestamp"] = pd.to_datetime(chart["timestamp"], errors="coerce")
     chart["line_group"] = chart["bpm_clean"].isna().astype(int).cumsum()
     chart["series"] = "FC clean"
     chart["bpm"] = chart["bpm_clean"]
@@ -134,7 +143,7 @@ def build_polar_fc_chart_frame(hr_frame: pd.DataFrame) -> pd.DataFrame:
     chart = hr_frame.copy()
     if chart.empty:
         return pd.DataFrame(columns=["timestamp", "bpm", "line_group", "series"])
-    chart["timestamp"] = pd.to_datetime(chart["timestamp"])
+    chart["timestamp"] = pd.to_datetime(chart["timestamp"], errors="coerce")
     chart["bpm"] = chart["bpm"].where(chart["bpm"] > 0, np.nan)
     break_mask = chart["bpm"].isna()
     if "segment_id" in chart.columns:
@@ -145,15 +154,124 @@ def build_polar_fc_chart_frame(hr_frame: pd.DataFrame) -> pd.DataFrame:
     return chart[["timestamp", "bpm", "line_group", "series"]].copy()
 
 
+def build_fc_comparison_frame(fc_clean_frame: pd.DataFrame, hr_frame: pd.DataFrame) -> pd.DataFrame:
+    empty = pd.DataFrame(
+        columns=[
+            "timestamp",
+            "polar_timestamp",
+            "clean_timestamp",
+            "bpm_polar",
+            "bpm_clean",
+            "delta_bpm",
+            "abs_delta_bpm",
+            "match_delay_ms",
+        ]
+    )
+    if fc_clean_frame.empty or hr_frame.empty:
+        return empty
+
+    clean = fc_clean_frame.copy()
+    clean["timestamp"] = pd.to_datetime(clean["timestamp"], errors="coerce")
+    clean = clean.loc[clean["bpm_clean"].notna(), ["timestamp", "bpm_clean"]].rename(columns={"timestamp": "clean_timestamp"})
+    clean = clean.sort_values("clean_timestamp").reset_index(drop=True)
+
+    polar = hr_frame.copy()
+    polar["timestamp"] = pd.to_datetime(polar["timestamp"], errors="coerce")
+    polar["bpm"] = polar["bpm"].where(polar["bpm"] > 0, np.nan)
+    polar = polar.loc[polar["bpm"].notna(), ["timestamp", "bpm"]].rename(columns={"timestamp": "polar_timestamp", "bpm": "bpm_polar"})
+    polar = polar.sort_values("polar_timestamp").reset_index(drop=True)
+
+    if clean.empty or polar.empty:
+        return empty
+
+    comparison = pd.merge_asof(
+        polar,
+        clean,
+        left_on="polar_timestamp",
+        right_on="clean_timestamp",
+        direction="nearest",
+        tolerance=pd.Timedelta(seconds=COMPARISON_MATCH_TOLERANCE_SECONDS),
+    )
+    comparison["timestamp"] = comparison["polar_timestamp"]
+    comparison["delta_bpm"] = comparison["bpm_clean"] - comparison["bpm_polar"]
+    comparison["abs_delta_bpm"] = comparison["delta_bpm"].abs()
+    comparison["match_delay_ms"] = (
+        comparison["polar_timestamp"] - comparison["clean_timestamp"]
+    ).abs().dt.total_seconds() * 1000.0
+    return comparison
+
+
+def build_fc_comparison_stats(comparison_frame: pd.DataFrame) -> dict[str, float | int]:
+    total_polar_points = int(len(comparison_frame))
+    matched = comparison_frame.dropna(subset=["delta_bpm"]).copy()
+    matched_points = int(len(matched))
+    coverage_pct = (matched_points / total_polar_points * 100.0) if total_polar_points else 0.0
+
+    correlation = np.nan
+    if len(matched) >= 2 and matched["bpm_clean"].nunique() > 1 and matched["bpm_polar"].nunique() > 1:
+        correlation = float(matched["bpm_clean"].corr(matched["bpm_polar"]))
+
+    rmse = np.nan
+    if not matched.empty:
+        rmse = float(np.sqrt(np.mean(np.square(matched["delta_bpm"]))))
+
+    return {
+        "total_polar_points": total_polar_points,
+        "matched_points": matched_points,
+        "coverage_pct": float(coverage_pct),
+        "mean_diff_bpm": float(matched["delta_bpm"].mean()) if not matched.empty else np.nan,
+        "mae_bpm": float(matched["abs_delta_bpm"].mean()) if not matched.empty else np.nan,
+        "rmse_bpm": rmse,
+        "median_abs_diff_bpm": float(matched["abs_delta_bpm"].median()) if not matched.empty else np.nan,
+        "within_3_bpm_pct": float((matched["abs_delta_bpm"] <= 3.0).mean() * 100.0) if not matched.empty else np.nan,
+        "within_5_bpm_pct": float((matched["abs_delta_bpm"] <= 5.0).mean() * 100.0) if not matched.empty else np.nan,
+        "correlation": correlation,
+        "mean_match_delay_ms": float(matched["match_delay_ms"].mean()) if not matched.empty else np.nan,
+    }
+
+
 def build_time_domain(session, rr_clean_frame: pd.DataFrame, fc_clean_frame: pd.DataFrame, hr_frame: pd.DataFrame) -> list[str]:
     start = session_start_dt(session)
     max_candidates = [start]
     for frame in (rr_clean_frame, fc_clean_frame, hr_frame):
         if not frame.empty and "timestamp" in frame.columns:
-            timestamps = pd.to_datetime(frame["timestamp"])
+            timestamps = pd.to_datetime(frame["timestamp"], errors="coerce").dropna()
             if not timestamps.empty:
                 max_candidates.append(timestamps.max().to_pydatetime())
     return [start.isoformat(), max(max_candidates).isoformat()]
+
+
+def describe_fc_window(clean_meta: dict, fc_clean_frame: pd.DataFrame) -> str:
+    window_seconds = clean_meta.get("fc_clean_window_seconds")
+    window_mode = clean_meta.get("fc_clean_window_mode", FC_CLEAN_WINDOW_MODE)
+    if window_seconds is None and not fc_clean_frame.empty and "window_duration_s" in fc_clean_frame.columns:
+        non_null = fc_clean_frame["window_duration_s"].dropna()
+        if not non_null.empty:
+            window_seconds = float(non_null.iloc[0])
+    if window_seconds is not None:
+        mode_label = "glissante arriere" if str(window_mode) == "trailing_seconds" else str(window_mode)
+        return f"Fenetre {mode_label} de {float(window_seconds):g} s"
+
+    legacy_beats = clean_meta.get("fc_clean_window_beats")
+    if legacy_beats is not None:
+        return f"Fenetre centree de {legacy_beats} battements"
+    if not fc_clean_frame.empty and "window_size_beats" in fc_clean_frame.columns:
+        non_null = fc_clean_frame["window_size_beats"].dropna()
+        if not non_null.empty:
+            return f"Fenetre centree de {int(non_null.iloc[0])} battements"
+    return f"Fenetre de {FC_CLEAN_WINDOW_SECONDS:g} s"
+
+
+def format_signed(value: float | int | None, unit: str = "", digits: int = 2) -> str:
+    if value is None or pd.isna(value):
+        return "-"
+    return f"{float(value):+.{digits}f}{unit}"
+
+
+def format_float(value: float | int | None, unit: str = "", digits: int = 2) -> str:
+    if value is None or pd.isna(value):
+        return "-"
+    return f"{float(value):.{digits}f}{unit}"
 
 
 def main() -> None:
@@ -163,7 +281,7 @@ def main() -> None:
         """
         <div class="hero-card">
             <div class="hero-title">Comparaison FC clean et FC Polar</div>
-            <div class="hero-subtitle">Visualisation des RR clean v3, de la FC recalculée sur fenêtre centrée de 5 battements, et de la FC issue de Polar sur un axe horaire absolu.</div>
+            <div class="hero-subtitle">Visualisation des RR clean v3, de la FC recalculée sur fenêtre glissante de 5 secondes, et de la FC issue de Polar sur un axe horaire absolu.</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -176,15 +294,15 @@ def main() -> None:
         st.stop()
 
     with st.sidebar:
-        render_section_label("Sélection")
+        render_section_label("Selection")
         session_options = {format_session_label(session): session.session_id for session in sessions}
         selected_label = st.selectbox("Session", list(session_options.keys()), index=len(session_options) - 1)
-        show_full_tables = st.toggle("Afficher les tables complètes", value=False)
+        show_full_tables = st.toggle("Afficher les tables completes", value=False)
 
     session_id = session_options[selected_label]
     session, _, hr_frame = repository.load_session_data(session_id)
     if not repository.has_clean_export(session_id):
-        st.warning("Cette séance n'a pas encore d'export clean. Ouvre d'abord la page Nettoyage RR pour générer les fichiers clean.")
+        st.warning("Cette seance n'a pas encore d'export clean. Ouvre d'abord la page Nettoyage RR pour generer les fichiers clean.")
         st.stop()
 
     session, rr_clean_frame, fc_clean_frame, clean_meta = repository.load_clean_data(session_id)
@@ -193,6 +311,8 @@ def main() -> None:
     rr_chart = build_rr_clean_chart_frame(rr_clean_frame)
     clean_fc_chart = build_fc_clean_chart_frame(fc_clean_frame)
     polar_fc_chart = build_polar_fc_chart_frame(hr_frame)
+    comparison_frame = build_fc_comparison_frame(fc_clean_frame, hr_frame)
+    comparison_stats = build_fc_comparison_stats(comparison_frame)
     time_domain = build_time_domain(session, rr_chart, clean_fc_chart, polar_fc_chart)
 
     rr_clean_visible = int(rr_chart["display_rr_ms"].notna().sum()) if not rr_chart.empty else 0
@@ -200,20 +320,37 @@ def main() -> None:
     ok_rr_total = int(rr_clean_frame["fc_ok"].sum()) if not rr_clean_frame.empty else 0
     non_viable_rr_total = int((~rr_clean_frame[["fc_ok", "hrr_ok", "rmssd_ok"]].any(axis=1)).sum()) if not rr_clean_frame.empty else 0
 
-    render_section_label("Résumé séance")
+    render_section_label("Resume seance")
     metrics = st.columns(6)
     metrics[0].metric("RR bruts", str(session.nb_battements_rr))
     metrics[1].metric("RR clean visibles", str(rr_clean_visible))
     metrics[2].metric("RR FC exploitables", str(ok_rr_total))
     metrics[3].metric("RR non viables", str(non_viable_rr_total))
     metrics[4].metric("Points FC clean", str(fc_clean_points))
-    metrics[5].metric("Qualité globale", str(clean_meta.get("global_quality_label", "-")))
+    metrics[5].metric("Qualite globale", str(clean_meta.get("global_quality_label", "-")))
 
-    render_section_label("Paramètres FC clean")
+    render_section_label("Parametres FC clean")
     st.caption(
-        f"Fenêtre centrée de {clean_meta.get('fc_clean_window_beats', FC_CLEAN_WINDOW_BEATS)} battements | "
+        f"{describe_fc_window(clean_meta, fc_clean_frame)} | "
         f"minimum {clean_meta.get('fc_clean_min_viable_points', FC_CLEAN_MIN_VIABLE_POINTS)} RR exploitables FC | "
-        f"export du {clean_meta.get('export_timestamp', '-') }"
+        f"export du {clean_meta.get('export_timestamp', '-')}"
+    )
+
+    render_section_label("Indicateurs FC clean vs Polar")
+    comparison_metrics = st.columns(6)
+    comparison_metrics[0].metric("Points Polar compares", str(comparison_stats["matched_points"]))
+    comparison_metrics[1].metric("Couverture", format_float(comparison_stats["coverage_pct"], unit="%", digits=1))
+    comparison_metrics[2].metric("Biais clean - Polar", format_signed(comparison_stats["mean_diff_bpm"], unit=" bpm"))
+    comparison_metrics[3].metric("Erreur abs. moyenne", format_float(comparison_stats["mae_bpm"], unit=" bpm"))
+    comparison_metrics[4].metric("RMSE", format_float(comparison_stats["rmse_bpm"], unit=" bpm"))
+    comparison_metrics[5].metric("Correlation", format_float(comparison_stats["correlation"], digits=3))
+    st.caption(
+        f"Appariement par horodatage le plus proche avec une tolerance de {COMPARISON_MATCH_TOLERANCE_SECONDS:g} s. "
+        f"Ecart = FC clean - FC Polar | "
+        f"Mediane abs. {format_float(comparison_stats['median_abs_diff_bpm'], unit=' bpm')} | "
+        f"<= 3 bpm {format_float(comparison_stats['within_3_bpm_pct'], unit='%', digits=1)} | "
+        f"<= 5 bpm {format_float(comparison_stats['within_5_bpm_pct'], unit='%', digits=1)} | "
+        f"Delai moyen d'appariement {format_float(comparison_stats['mean_match_delay_ms'], unit=' ms')}."
     )
 
     fc_combined = pd.concat([
@@ -223,15 +360,15 @@ def main() -> None:
 
     color_scale = alt.Scale(domain=["FC clean", "FC Polar"], range=["#1f6f50", "#b45309"])
     fc_chart = alt.Chart(fc_combined.dropna(subset=["bpm"])).mark_line(strokeWidth=2.4).encode(
-        x=alt.X("timestamp:T", title="Heure de la séance", scale=alt.Scale(domain=time_domain)),
+        x=alt.X("timestamp:T", title="Heure de la seance", scale=alt.Scale(domain=time_domain)),
         y=alt.Y("bpm:Q", title="FC (bpm)"),
-        color=alt.Color("series:N", scale=color_scale, title="Série"),
+        color=alt.Color("series:N", scale=color_scale, title="Serie"),
         detail="line_group:N",
         tooltip=["timestamp:T", "series:N", "bpm:Q"],
     )
 
     rr_chart_alt = alt.Chart(rr_chart.dropna(subset=["display_rr_ms"])).mark_line(color="#2d5f43", strokeWidth=2.2).encode(
-        x=alt.X("timestamp:T", title="Heure de la séance", scale=alt.Scale(domain=time_domain)),
+        x=alt.X("timestamp:T", title="Heure de la seance", scale=alt.Scale(domain=time_domain)),
         y=alt.Y("display_rr_ms:Q", title="RR clean (ms)"),
         detail="line_group:N",
         tooltip=["timestamp:T", "display_rr_ms:Q", "label:N", "run_flag:N", "correction_flag:N"],
@@ -241,11 +378,30 @@ def main() -> None:
     with col1:
         render_section_label("FC clean vs FC Polar")
         st.altair_chart(fc_chart.properties(height=360), use_container_width=True)
-        st.caption("La FC clean est calculée sur une fenêtre centrée de 5 battements. Si moins de 2 RR exploitables FC sont présents dans la fenêtre, la courbe laisse un trou.")
+        st.caption("La FC clean est calculee sur une fenetre glissante arriere de 5 s. Si moins de 2 RR exploitables FC sont presents dans la fenetre, la courbe laisse un trou.")
     with col2:
         render_section_label("RR clean")
         st.altair_chart(rr_chart_alt.properties(height=360), use_container_width=True)
-        st.caption("Les points non exploitables restent traçables dans la table mais ne sont pas tracés sur cette courbe clean.")
+        st.caption("Les points non exploitables restent tracables dans la table mais ne sont pas traces sur cette courbe clean.")
+
+    render_section_label("Ecart FC clean - FC Polar")
+    matched_comparison = comparison_frame.dropna(subset=["delta_bpm"]).copy()
+    if matched_comparison.empty:
+        st.info("Pas assez de points apparies entre FC clean et FC Polar pour afficher l'ecart temporel.")
+    else:
+        zero_rule = alt.Chart(pd.DataFrame({"y": [0.0]})).mark_rule(color="#64748b", strokeDash=[6, 4]).encode(y="y:Q")
+        diff_chart = alt.Chart(matched_comparison).mark_line(color="#0f766e", strokeWidth=2.3).encode(
+            x=alt.X("timestamp:T", title="Heure de la seance", scale=alt.Scale(domain=time_domain)),
+            y=alt.Y("delta_bpm:Q", title="Ecart (bpm)"),
+            tooltip=[
+                "timestamp:T",
+                alt.Tooltip("bpm_clean:Q", title="FC clean"),
+                alt.Tooltip("bpm_polar:Q", title="FC Polar"),
+                alt.Tooltip("delta_bpm:Q", title="Ecart"),
+                alt.Tooltip("match_delay_ms:Q", title="Decalage appariement (ms)"),
+            ],
+        )
+        st.altair_chart((zero_rule + diff_chart).properties(height=260), use_container_width=True)
 
     table_col1, table_col2 = st.columns(2)
     with table_col1:
@@ -255,9 +411,15 @@ def main() -> None:
         st.dataframe(rr_table, use_container_width=True, height=340, hide_index=True)
     with table_col2:
         render_section_label("Table FC clean")
-        fc_columns = ["timestamp", "bpm_clean", "window_viable_points", "window_size_beats", "center_fc_ok", "center_hrr_ok", "center_rmssd_ok"]
-        fc_table = fc_clean_frame[fc_columns] if show_full_tables else fc_clean_frame[fc_columns].head(500)
+        fc_columns = ["timestamp", "bpm_clean", "window_viable_points", "window_duration_s", "window_mode", "center_fc_ok", "center_hrr_ok", "center_rmssd_ok"]
+        available_fc_columns = [column for column in fc_columns if column in fc_clean_frame.columns]
+        fc_table = fc_clean_frame[available_fc_columns] if show_full_tables else fc_clean_frame[available_fc_columns].head(500)
         st.dataframe(fc_table, use_container_width=True, height=340, hide_index=True)
+
+    with st.expander("Table comparaison FC clean vs Polar", expanded=False):
+        comparison_columns = ["timestamp", "bpm_clean", "bpm_polar", "delta_bpm", "abs_delta_bpm", "match_delay_ms"]
+        comparison_table = comparison_frame[comparison_columns] if show_full_tables else comparison_frame[comparison_columns].head(500)
+        st.dataframe(comparison_table, use_container_width=True, height=320, hide_index=True)
 
 
 if __name__ == "__main__":
