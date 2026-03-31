@@ -346,6 +346,12 @@ def main() -> None:
         y=alt.Y("display_rr_ms:Q", title="RR clean (ms)"),
         detail="line_group:N",
     )
+    rr_clean_plain_chart = alt.Chart(visible_rr).mark_line(color="#2d5f43", strokeWidth=2.1).encode(
+        x=alt.X("timestamp:T", title="Heure de la s?ance", scale=alt.Scale(domain=time_domain)),
+        y=alt.Y("display_rr_ms:Q", title="RR clean (ms)"),
+        detail="line_group:N",
+        tooltip=["timestamp:T", "display_rr_ms:Q"],
+    )
     rr_corrected_chart = alt.Chart(corrected_rr).mark_point(filled=True, size=86, stroke="#ffffff", strokeWidth=1.1).encode(
         x="timestamp:T",
         y="display_rr_ms:Q",
@@ -364,7 +370,13 @@ def main() -> None:
         y2="y_max:Q",
         tooltip=["dense_region_id:Q", "nb_battements:Q", "nb_artefacts:Q", "densite_artefact_pct:Q"],
     )
-    st.altair_chart((rr_dense_chart + rr_line_chart + rr_corrected_chart).properties(height=380).interactive(), use_container_width=True)
+    rr_col1, rr_col2 = st.columns(2)
+    with rr_col1:
+        render_section_label("RR clean annot?")
+        st.altair_chart((rr_dense_chart + rr_line_chart + rr_corrected_chart).properties(height=380).interactive(), use_container_width=True)
+    with rr_col2:
+        render_section_label("RR clean sans annotation")
+        st.altair_chart(rr_clean_plain_chart.properties(height=380).interactive(), use_container_width=True)
 
     table_col1, table_col2 = st.columns(2)
     with table_col1:
