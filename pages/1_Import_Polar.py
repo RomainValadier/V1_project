@@ -362,7 +362,7 @@ def main() -> None:
     with st.sidebar:
         render_section_label("Parametres")
         output_dir = st.text_input("Dossier data", value=DEFAULT_OUTPUT_DIR)
-        st.caption("Fusion auto < 30 s | confirmation 30-90 s | non-fusion > 90 s")
+        st.caption("Fusion auto < 30 s | confirmation 30 s - 5 min | non-fusion > 5 min")
 
     render_section_label("Retraitement raw -> processed")
     if st.button("Retraiter les sessions existantes", use_container_width=True):
@@ -417,7 +417,7 @@ def main() -> None:
 
     gap_merge_decisions: dict[str, bool] = {}
     if initial_plan.pending_gap_reviews:
-        render_section_label("Confirmations des jonctions 30-90 s")
+        render_section_label("Confirmations des jonctions 30 s - 5 min")
         for review in initial_plan.pending_gap_reviews:
             radio_key = f"gap_review_{review['decision_key']}"
             decision = st.radio(

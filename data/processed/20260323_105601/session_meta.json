@@ -70,5 +70,18 @@
   ],
   "rr_clean_filepath": "clean\\20260323_105601\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260323_105601\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-03-30T15:50:34.762078"
+  "clean_export_timestamp": "2026-03-30T15:50:34.762078",
+  "activity_family": "prepa",
+  "activity_label": "prepa > musculation",
+  "activity_notes": null,
+  "judo_session_type": null,
+  "judo_phases": null,
+  "judo_randori_blocks": null,
+  "is_activity_annotated": true,
+  "activity_annotated_at": "2026-04-01T22:15:28.292421",
+  "is_archived": false,
+  "fc_phase_segments": null,
+  "is_temporally_annotated": false,
+  "temporally_annotated_at": null,
+  "updated_at": "2026-04-01T22:15:28.292421"
 }

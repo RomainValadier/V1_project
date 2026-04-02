@@ -1,0 +1,545 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FC Segment Editor</title>
+  <script src="./plotly.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: Arial, sans-serif;
+      color: #13231a;
+    }
+    #root {
+      padding: 6px 0 0 0;
+    }
+    #banner {
+      margin: 0 0 8px 0;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(27, 67, 50, 0.12);
+      box-shadow: 0 8px 20px rgba(30, 41, 59, 0.06);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    #banner strong {
+      color: #173427;
+    }
+    #chart-wrap {
+      position: relative;
+      width: 100%;
+      min-height: 520px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(27, 67, 50, 0.10);
+    }
+    #chart {
+      width: 100%;
+      height: 520px;
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .handle {
+      position: absolute;
+      width: 16px;
+      margin-left: -8px;
+      background: transparent;
+      cursor: ew-resize;
+      pointer-events: auto;
+    }
+    .handle::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      transform: translateX(-50%);
+      width: 3px;
+      height: 100%;
+      border-radius: 999px;
+      background: rgba(180, 83, 9, 0.15);
+    }
+    .handle.hover::before,
+    .handle.dragging::before {
+      width: 4px;
+      background: rgba(180, 83, 9, 0.85);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
+    }
+    #drag-line {
+      position: absolute;
+      top: 0;
+      width: 0;
+      border-left: 2px dashed rgba(180, 83, 9, 0.95);
+      pointer-events: none;
+      display: none;
+    }
+    #tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.92);
+      color: #ffffff;
+      font-size: 12px;
+      white-space: nowrap;
+      transform: translate(10px, -50%);
+      z-index: 25;
+      box-shadow: 0 10px 20px rgba(15,23,42,0.28);
+    }
+    #footer-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="banner">Chargement de l'editeur des segments...</div>
+    <div id="chart-wrap">
+      <div id="chart"></div>
+      <div id="overlay">
+        <div id="drag-line"></div>
+        <div id="tooltip"></div>
+      </div>
+    </div>
+    <div id="footer-note">Clic gauche dans un segment pour le selectionner. Glisse un bord interne, ou les bornes debut/fin, pour redimensionner la seance.</div>
+  </div>
+
+  <script>
+    const DEFAULT_COLORS = {
+      echauffement: '#f59e0b',
+      technique: '#3b82f6',
+      randori: '#ef4444',
+      recuperation: '#22c55e',
+      retour_calme: '#8b5cf6',
+      autre: '#6b7280',
+    };
+
+    const state = {
+      eventId: 0,
+      hrPoints: [],
+      segments: [],
+      selectedSegmentId: null,
+      minDurationS: 10,
+      graphDiv: null,
+      drag: null,
+      lastPayloadHash: null,
+      isPlotReady: false,
+      suppressClickUntil: 0,
+      totalDurationS: 0,
+    };
+
+    const bannerEl = document.getElementById('banner');
+    const chartWrapEl = document.getElementById('chart-wrap');
+    const chartEl = document.getElementById('chart');
+    const overlayEl = document.getElementById('overlay');
+    const dragLineEl = document.getElementById('drag-line');
+    const tooltipEl = document.getElementById('tooltip');
+
+    function postMessageToStreamlit(type, data) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
+    }
+
+    function setFrameHeight(height) {
+      postMessageToStreamlit('streamlit:setFrameHeight', { height });
+    }
+
+    function setComponentValue(value) {
+      postMessageToStreamlit('streamlit:setComponentValue', { value });
+    }
+
+    function componentReady() {
+      postMessageToStreamlit('streamlit:componentReady', { apiVersion: 1 });
+    }
+
+    function formatTime(seconds) {
+      const total = Math.max(0, Math.round(Number(seconds) || 0));
+      const mins = Math.floor(total / 60);
+      const secs = total % 60;
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function formatDuration(seconds) {
+      return formatTime(seconds);
+    }
+
+    function segmentDuration(segment) {
+      return Math.max(0, Number(segment.t_fin_s) - Number(segment.t_debut_s));
+    }
+
+    function normalizeSegments(rawSegments) {
+      return (rawSegments || []).map((segment, index) => ({
+        id: Number(segment.id ?? segment.segment_index ?? index),
+        type: String(segment.type ?? segment.label ?? 'autre'),
+        t_debut_s: Number(segment.t_debut_s ?? segment.start_offset_s ?? 0),
+        t_fin_s: Number(segment.t_fin_s ?? segment.end_offset_s ?? 0),
+        color: segment.color || DEFAULT_COLORS[String(segment.type ?? segment.label ?? 'autre')] || DEFAULT_COLORS.autre,
+      }));
+    }
+
+    function cloneSegments(segments) {
+      return segments.map(segment => ({ ...segment }));
+    }
+
+    function getSelectedSegment() {
+      return state.segments.find(segment => Number(segment.id) === Number(state.selectedSegmentId)) || null;
+    }
+
+    function updateBanner() {
+      const segment = getSelectedSegment();
+      if (!segment) {
+        bannerEl.innerHTML = '<strong>Aucun segment actif</strong> - clique dans une zone coloree pour selectionner un segment.';
+        return;
+      }
+      bannerEl.innerHTML = `<strong>Segment actif :</strong> ${segment.type} | ${formatTime(segment.t_debut_s)} -> ${formatTime(segment.t_fin_s)} | duree ${formatDuration(segmentDuration(segment))}`;
+    }
+
+    function buildShapes() {
+      return state.segments.map(segment => {
+        const isSelected = Number(segment.id) === Number(state.selectedSegmentId);
+        return {
+          type: 'rect',
+          xref: 'x',
+          yref: 'paper',
+          x0: segment.t_debut_s,
+          x1: segment.t_fin_s,
+          y0: 0,
+          y1: 1,
+          fillcolor: segment.color,
+          opacity: isSelected ? 0.28 : 0.18,
+          line: {
+            color: isSelected ? '#b45309' : 'rgba(30,41,59,0.25)',
+            width: isSelected ? 3 : 1,
+            dash: isSelected ? 'dot' : 'solid',
+          },
+          layer: 'below',
+        };
+      });
+    }
+
+    function buildAnnotations() {
+      return state.segments.map(segment => ({
+        x: (segment.t_debut_s + segment.t_fin_s) / 2,
+        xref: 'x',
+        y: 1,
+        yref: 'paper',
+        yshift: -6,
+        showarrow: false,
+        text: `${segment.type}<br>${formatDuration(segmentDuration(segment))}`,
+        align: 'center',
+        font: {
+          size: Number(segment.id) === Number(state.selectedSegmentId) ? 12 : 11,
+          color: Number(segment.id) === Number(state.selectedSegmentId) ? '#8a4b08' : '#334155',
+        },
+      }));
+    }
+
+    function getLineTrace() {
+      return {
+        x: state.hrPoints.map(point => Number(point.t_offset_s)),
+        y: state.hrPoints.map(point => Number(point.bpm)),
+        mode: 'lines',
+        line: { color: '#1f5f43', width: 2.5 },
+        hovertemplate: 'Temps %{x:.0f}s<br>FC %{y:.0f} bpm<extra></extra>',
+        type: 'scatter',
+        name: 'FC brute',
+      };
+    }
+
+    function renderFigure(fullRender = false) {
+      if (!state.graphDiv) {
+        state.graphDiv = chartEl;
+      }
+      const layout = {
+        margin: { l: 44, r: 20, t: 24, b: 46 },
+        height: 520,
+        paper_bgcolor: 'rgba(255,255,255,0)',
+        plot_bgcolor: 'rgba(255,255,255,0.88)',
+        dragmode: 'pan',
+        hovermode: 'closest',
+        showlegend: false,
+        xaxis: { title: 'Temps (s)', fixedrange: false },
+        yaxis: { title: 'FC brute (bpm)', fixedrange: false },
+        shapes: buildShapes(),
+        annotations: buildAnnotations(),
+      };
+      const config = {
+        responsive: true,
+        displayModeBar: true,
+        scrollZoom: true,
+      };
+      if (!state.isPlotReady || fullRender) {
+        Plotly.react(chartEl, [getLineTrace()], layout, config).then(() => {
+          state.isPlotReady = true;
+          bindPlotEvents();
+          renderOverlay();
+          setFrameHeight(document.body.scrollHeight + 12);
+        });
+      } else {
+        Plotly.relayout(chartEl, { shapes: layout.shapes, annotations: layout.annotations });
+        renderOverlay();
+      }
+      updateBanner();
+    }
+
+    function getAxes() {
+      if (!chartEl._fullLayout || !chartEl._fullLayout.xaxis || !chartEl._fullLayout.yaxis) {
+        return null;
+      }
+      return { xaxis: chartEl._fullLayout.xaxis, yaxis: chartEl._fullLayout.yaxis };
+    }
+
+    function xToPixel(xValue) {
+      const axes = getAxes();
+      if (!axes) {
+        return 0;
+      }
+      return axes.xaxis._offset + axes.xaxis.l2p(xValue);
+    }
+
+    function clientXToDataX(clientX) {
+      const axes = getAxes();
+      const rect = chartEl.getBoundingClientRect();
+      if (!axes) {
+        return 0;
+      }
+      const pixel = clientX - rect.left - axes.xaxis._offset;
+      return axes.xaxis.p2l(pixel);
+    }
+
+    function showEdgeTooltip(handle, label, timeS) {
+      const left = parseFloat(handle.style.left || '0');
+      tooltipEl.style.display = 'block';
+      tooltipEl.style.left = `${left}px`;
+      tooltipEl.style.top = `${parseFloat(handle.style.top || '0') + 18}px`;
+      tooltipEl.textContent = `${label} ${formatTime(timeS)}`;
+    }
+
+    function renderOverlay() {
+      const axes = getAxes();
+      if (!axes) {
+        return;
+      }
+      const existingHandles = overlayEl.querySelectorAll('.handle');
+      existingHandles.forEach(node => node.remove());
+      const top = axes.yaxis._offset;
+      const height = axes.yaxis._length;
+      dragLineEl.style.top = `${top}px`;
+      dragLineEl.style.height = `${height}px`;
+
+      const handleSpecs = [];
+      if (state.segments.length) {
+        handleSpecs.push({ kind: 'start', x: state.segments[0].t_debut_s, label: 'debut' });
+        for (let index = 0; index < state.segments.length - 1; index += 1) {
+          handleSpecs.push({ kind: 'internal', index, x: state.segments[index].t_fin_s, label: '' });
+        }
+        handleSpecs.push({ kind: 'end', x: state.segments[state.segments.length - 1].t_fin_s, label: 'fin' });
+      }
+
+      handleSpecs.forEach(spec => {
+        const handle = document.createElement('div');
+        handle.className = 'handle';
+        handle.style.left = `${xToPixel(spec.x)}px`;
+        handle.style.top = `${top}px`;
+        handle.style.height = `${height}px`;
+        handle.dataset.kind = spec.kind;
+        if (spec.kind === 'internal') {
+          handle.dataset.index = String(spec.index);
+        }
+        handle.addEventListener('mouseenter', () => {
+          handle.classList.add('hover');
+          if (spec.label) {
+            showEdgeTooltip(handle, spec.label, spec.x);
+          }
+        });
+        handle.addEventListener('mouseleave', () => {
+          if (!state.drag || state.drag.kind !== spec.kind || state.drag.index !== spec.index) {
+            handle.classList.remove('hover');
+          }
+          if (!state.drag && spec.label) {
+            tooltipEl.style.display = 'none';
+          }
+        });
+        handle.addEventListener('mousedown', event => startDrag(event, spec, handle));
+        overlayEl.appendChild(handle);
+      });
+    }
+
+    function sendSelection() {
+      setComponentValue({
+        event_id: ++state.eventId,
+        event_type: 'segment_selected',
+        selected_segment_id: state.selectedSegmentId,
+        segments: cloneSegments(state.segments),
+      });
+    }
+
+    function sendSegmentsUpdated() {
+      setComponentValue({
+        event_id: ++state.eventId,
+        event_type: 'segments_updated',
+        selected_segment_id: state.selectedSegmentId,
+        segments: cloneSegments(state.segments),
+      });
+    }
+
+    function bindPlotEvents() {
+      if (chartEl.__segmentEditorBound) {
+        return;
+      }
+      chartEl.__segmentEditorBound = true;
+      chartEl.on('plotly_relayout', () => renderOverlay());
+      chartEl.on('plotly_afterplot', () => renderOverlay());
+      chartEl.addEventListener('contextmenu', event => {
+        event.preventDefault();
+      });
+      chartEl.addEventListener('click', event => {
+        if (Date.now() < state.suppressClickUntil || state.drag) {
+          return;
+        }
+        const axes = getAxes();
+        if (!axes) {
+          return;
+        }
+        const rect = chartEl.getBoundingClientRect();
+        const relX = event.clientX - rect.left;
+        const relY = event.clientY - rect.top;
+        const withinPlot = relX >= axes.xaxis._offset && relX <= axes.xaxis._offset + axes.xaxis._length && relY >= axes.yaxis._offset && relY <= axes.yaxis._offset + axes.yaxis._length;
+        if (!withinPlot) {
+          return;
+        }
+        const xValue = clientXToDataX(event.clientX);
+        const hitSegment = state.segments.find((segment, index) => {
+          const isLast = index === state.segments.length - 1;
+          return xValue >= segment.t_debut_s && (xValue < segment.t_fin_s || (isLast && xValue <= segment.t_fin_s));
+        });
+        if (!hitSegment) {
+          return;
+        }
+        state.selectedSegmentId = hitSegment.id;
+        renderFigure();
+        sendSelection();
+      });
+    }
+
+    function startDrag(event, spec, handleEl) {
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const baseSegments = cloneSegments(state.segments);
+      state.drag = {
+        kind: spec.kind,
+        index: spec.kind === 'internal' ? spec.index : null,
+        baseSegments,
+        handleEl,
+        totalDurationS: state.totalDurationS,
+      };
+      if (spec.kind === 'start') {
+        state.drag.startEnd = baseSegments[0].t_fin_s;
+      } else if (spec.kind === 'end') {
+        state.drag.endStart = baseSegments[baseSegments.length - 1].t_debut_s;
+      } else {
+        const leftSegment = baseSegments[spec.index];
+        const rightSegment = baseSegments[spec.index + 1];
+        state.drag.leftStart = leftSegment.t_debut_s;
+        state.drag.rightEnd = rightSegment.t_fin_s;
+      }
+      handleEl.classList.add('dragging');
+      state.suppressClickUntil = Date.now() + 250;
+      document.addEventListener('mousemove', onDragMove);
+      document.addEventListener('mouseup', stopDrag);
+    }
+
+    function onDragMove(event) {
+      if (!state.drag) {
+        return;
+      }
+      let nextBoundary = clientXToDataX(event.clientX);
+      if (!Number.isFinite(nextBoundary)) {
+        return;
+      }
+      const nextSegments = cloneSegments(state.drag.baseSegments);
+      let tooltipLabel = '';
+      if (state.drag.kind === 'start') {
+        const minBoundary = 0.0;
+        const maxBoundary = state.drag.startEnd - state.minDurationS;
+        nextBoundary = Math.max(minBoundary, Math.min(maxBoundary, nextBoundary));
+        nextSegments[0].t_debut_s = nextBoundary;
+        tooltipLabel = 'debut';
+      } else if (state.drag.kind === 'end') {
+        const minBoundary = state.drag.endStart + state.minDurationS;
+        const maxBoundary = state.drag.totalDurationS;
+        nextBoundary = Math.max(minBoundary, Math.min(maxBoundary, nextBoundary));
+        nextSegments[nextSegments.length - 1].t_fin_s = nextBoundary;
+        tooltipLabel = 'fin';
+      } else {
+        const minBoundary = state.drag.leftStart + state.minDurationS;
+        const maxBoundary = state.drag.rightEnd - state.minDurationS;
+        nextBoundary = Math.max(minBoundary, Math.min(maxBoundary, nextBoundary));
+        nextSegments[state.drag.index].t_fin_s = nextBoundary;
+        nextSegments[state.drag.index + 1].t_debut_s = nextBoundary;
+      }
+      state.segments = nextSegments;
+      dragLineEl.style.display = 'block';
+      dragLineEl.style.left = `${xToPixel(nextBoundary)}px`;
+      tooltipEl.style.display = 'block';
+      tooltipEl.style.left = `${xToPixel(nextBoundary)}px`;
+      tooltipEl.style.top = `${event.clientY - chartEl.getBoundingClientRect().top}px`;
+      tooltipEl.textContent = tooltipLabel ? `${tooltipLabel} ${formatTime(nextBoundary)}` : formatTime(nextBoundary);
+      renderFigure();
+    }
+
+    function stopDrag() {
+      if (!state.drag) {
+        return;
+      }
+      if (state.drag.handleEl) {
+        state.drag.handleEl.classList.remove('dragging');
+        state.drag.handleEl.classList.remove('hover');
+      }
+      state.drag = null;
+      dragLineEl.style.display = 'none';
+      tooltipEl.style.display = 'none';
+      document.removeEventListener('mousemove', onDragMove);
+      document.removeEventListener('mouseup', stopDrag);
+      renderFigure();
+      sendSegmentsUpdated();
+    }
+
+    function applyRenderArgs(args) {
+      state.hrPoints = Array.isArray(args.hr_points) ? args.hr_points : [];
+      state.segments = normalizeSegments(args.segments);
+      state.selectedSegmentId = args.selected_segment_id ?? (state.segments[0] ? state.segments[0].id : null);
+      state.minDurationS = Number(args.min_duration_s ?? 10);
+      state.totalDurationS = state.hrPoints.length ? Number(state.hrPoints[state.hrPoints.length - 1].t_offset_s) : Math.max(...state.segments.map(segment => Number(segment.t_fin_s) || 0), 0);
+      updateBanner();
+      renderFigure(true);
+    }
+
+    window.addEventListener('message', event => {
+      const data = event.data || {};
+      if (data.type !== 'streamlit:render') {
+        return;
+      }
+      applyRenderArgs(data.args || {});
+    });
+
+    window.addEventListener('load', () => {
+      componentReady();
+      setFrameHeight(document.body.scrollHeight + 12);
+    });
+  </script>
+</body>
+</html>

@@ -79,3 +79,58 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
 - Plusieurs correctifs d'UI et de robustesse ont ete appliques au fil de l'eau (imports manquants, erreurs Altair, compatibilite avec anciens exports, affichage dynamique des legendes, correction des tooltips et des tables).
 - `changelog.md` etend maintenant fortement le niveau de detail du suivi par rapport a sa premiere version tres concise.
+
+## 2026-04-01
+
+### Gestion des activites
+
+- Ajout de la dependance `streamlit-calendar` dans `requirements.txt` pour preparer une vraie vue calendrier cliquable dans Streamlit.
+- Creation de la nouvelle page `pages/5_Gestion_activites.py` avec affichage calendrier, filtre par famille, filtre `annotees seulement`, prise en charge des archivees, panneau detail, edition des metadonnees d'activite, et affichage de la FC brute.
+- Ajout d'un fallback de selection simple si `streamlit-calendar` n'est pas encore installe localement, afin que la page reste exploitable meme sans composant calendrier actif.
+
+### Metadonnees de seance
+
+- Extension du dataclass `ProcessedSession` avec les champs d'annotation metier, d'archivage logique, de type de seance judo, de phases judo, de blocs randoris, et de notes generales.
+- Conservation de la compatibilite avec les anciennes `session_meta.json` grace a des champs optionnels et a la logique existante de `from_dict()`.
+- Ajout d'un flag persistant `is_activity_annotated` et de son horodatage `activity_annotated_at`.
+
+### Repository activites
+
+- Extension de `ProcessedSessionRepository` avec `update_activity_metadata()`, `archive_session()`, `restore_session()`, `build_calendar_events()` et un filtrage des sessions archivees dans `list_sessions()`.
+- Mise en place d'un archivage logique base sur `is_archived` / `archived_at`, sans suppression physique des donnees `raw`, `processed` ou `clean`.
+- Generation d'evenements calendrier colores selon la famille d'activite et mis en evidence lorsqu'une seance n'est pas encore annotee.
+- Conservation de `update_annotation()` en l'adossant maintenant a la nouvelle logique metier centralisee.
+
+### References activite / judo
+
+- Normalisation de `liste_activite.txt` en liste explicite de labels d'activites, incluant `judo > randoris > NW pure`.
+- Remplacement de `phase_rando.txt` par `seance_judo_phase.txt` avec les phases judo v1 : `echauffement`, `technique`, `randoris TW`, `randoris NW pure`, `randoris libres`, `autres`.
+- Prise en charge dans l'UI des blocs randoris avec nombre, duree d'un randori, repos entre randoris, et valeurs `NA` quand l'information n'est pas connue.
+- Mise en evidence visuelle de l'activite actuellement selectionnee dans le calendrier de `Gestion activites`, avec une couleur dediee pour la reperer immediatement.
+- Correction de la synchronisation de selection dans le calendrier de `Gestion activites` : un clic sur une activite declenche maintenant un rerun immediat pour que la couleur de selection et le panneau de detail se mettent a jour sans decalage.
+- Simplification du formulaire d'annotation dans `Gestion activites` : l'utilisateur choisit d'abord la famille, puis les champs de precision n'apparaissent que lorsque necessaire (`prepa` detaillee, `judo` par type, et `autres` / `judo > technique` auto-renseignes).
+- Ajout de la dependance `plotly` et d'un module d'annotations temporelles FC pour les seances `judo > randoris` dans `Gestion activites`.
+- Ajout d'un stockage persistant `fc_phase_segments` ainsi que du flag `is_temporally_annotated` et de son horodatage, limites aux seules seances `judo > randoris`.
+- Mise en place d'une auto-generation des segments temporels FC a partir du premier passage au-dessus de `150 bpm`, avec alternance `randori / recuperation` lorsque `randori_count` et `randori_duration_min` sont renseignes, et recuperation par defaut a `2 min` si seule cette valeur manque.
+- Ajout d'un graphe Plotly annote pour la FC brute, avec edition directe des bornes de segments a partir d'un point clique sur le graphe, ajout/suppression manuelle de segments, et tableau resume synchronise des phases et de leurs durees.
+- Refonte du module d'annotations temporelles FC pour les seances `judo > randoris` vers une HMI plus directe : suppression des boutons de confirmation, auto-save apres chaque modification valide, et mise en avant visuelle du segment actif dans le graphe Plotly.
+- Retrait des faux segments `debut_seance` et `fin_seance` du modele temporel persiste ; le debut et la fin d'enregistrement restent des bornes implicites affichees dans le graphe.
+- Evolution de l'auto-generation pour s'appuyer d'abord sur les `judo_phases` deja enregistrees, reutiliser les `judo_randori_blocks` quand ils sont complets, et detecter le debut de la zone randori a partir du premier passage au-dessus de `160 bpm`.
+- Ajout d'une normalisation temporelle orientee timeline dans le repository : lorsqu'un segment est ajuste ou deplace, les segments voisins sont automatiquement recales pour garder une seance coherente sans recouvrement.
+- Amelioration de l'edition dans `Gestion activites` avec modes de clic graphe (`placer debut`, `placer fin`, `deplacer segment`), micro-ajustements rapides (`+-5 s`, `+-15 s`), et normalisation automatique des anciennes segmentations contenant encore des segments de bord obsoletes.
+- Ajustement de l'interaction graphe dans `Gestion activites` : une borne temporelle deja selectionnee peut maintenant etre appliquee immediatement a un autre segment ou a un autre mode d'edition sans exiger un nouveau clic distinct sur le graphe.
+- Ajustement du flux d'edition temporelle : le changement de segment actif vide maintenant le point graphe precedemment selectionne pour imposer un processus clair `selection du segment puis modification de ce segment`.
+- Ajout d'un composant front local `frontend/fc_segment_editor/` embarquant Plotly.js pour l'annotation manuelle interactive des segments FC dans `Gestion activites`.
+- La selection du segment actif se fait maintenant au clic gauche dans une zone de segment, avec bandeau d'information mis a jour et mise en evidence visuelle du segment selectionne.
+- Les bords internes des segments peuvent etre redimensionnes par drag direct, avec contiguite stricte des segments, duree minimale fixee a 10 secondes, ligne verticale pointillee pendant le drag, tooltip temporel `mm:ss`, et mise a jour en temps reel des durees affichees.
+- Ajout d'un export CSV des segments temporels (`segment_id`, `type`, `t_debut_s`, `t_fin_s`, `duree_s`) et extension des labels de phases autorises a `retour_calme` et `autre`.
+- Correction de l'integration Streamlit du composant d'edition FC : la declaration `declare_component` a ete deplacee hors de la page vers `polar_app/fc_segment_component.py` pour eviter l'erreur de contexte d'execution `module is None` au chargement de la page multipage.
+- Evolution de l'auto-generation temporelle FC : les phases judo deja renseignees servent maintenant de squelette direct, les randoris sont detectes sur une montee rapide au-dessus de `160 bpm`, les recuperations demarrent lors d'une forte rechute vers `140 bpm`, et le dernier segment auto-genere est aligne par defaut sur la fin de la seance.
+- Ajout de bornes d'edition explicites `debut` et `fin` dans le composant front d'annotation FC, avec survol nomme et redimensionnement direct de la fenetre de seance depuis le graphe.
+- Ajustement de l'auto-generation des seances `judo > randoris` pour respecter `randori_count` : chaque bloc randori genere maintenant le bon nombre de segments `randori`, avec recuperations intermediaires basees sur la duree de repos renseignee ou sur la valeur par defaut.
+- Ajout dans `Gestion activites` d'un controle d'insertion manuelle d'un segment apres le segment actif, avec choix du type de phase, puis d'un bouton `Valider segmentation` qui persiste la timeline courante et rafraichit le resume des phases juste en dessous.
+- Ajustement de l'HMI de segmentation temporelle : les controles `Type du nouveau segment`, `Ajouter apres segment actif` et `Valider segmentation` sont maintenant places sous le graphique pour suivre le flux naturel d'edition visuelle.
+- Ajout dans le panneau `Segment actif` d'un selecteur pour modifier le type de la phase selectionnee (`echauffement`, `technique`, `randori`, `recuperation`, `retour_calme`, `autre`) sans modifier ses bornes temporelles.
+- Correction de la selection du dernier segment dans l'editeur FC : un clic sur la derniere zone ne bascule plus par erreur sur le segment precedent lorsque le curseur tombe au niveau d'une borne partagee.
+- Refonte de l'HMI du panneau `Segment actif` : edition regroupee du type et des bornes, actions explicites `Ajouter a gauche`, `Ajouter a droite`, `Supprimer`, et recalage automatique de la timeline apres insertion ou suppression.
+- Correction de la synchronisation entre le clic dans le graphe FC et le panneau `Segment actif` : un changement de segment selectionne declenche maintenant un rerun immediat pour afficher sans decalage les bonnes informations et actions d'edition.

@@ -1,0 +1,285 @@
+{
+  "session_id": "20260331_160349",
+  "device_id": "EBAF6822",
+  "date": "2026-03-31",
+  "heure_debut": "16:03:49",
+  "annotation": "Judo Insep",
+  "fc_start_ts": "2026-03-31T16:03:49.101000",
+  "nb_battements_rr": 16796,
+  "nb_points_hr": 6996,
+  "duree_s": 7407.944,
+  "bpm_moyen": 137.7,
+  "bpm_min": 97,
+  "bpm_max": 172,
+  "rr_min_ms": 253,
+  "rr_max_ms": 2770,
+  "rr_filepath": "processed\\20260331_160349\\rr.parquet",
+  "hr_filepath": "processed\\20260331_160349\\hr.parquet",
+  "format_fichiers": "parquet",
+  "import_timestamp": "2026-04-01T16:45:21.509001",
+  "source_session_ids": [
+    "20260331_160336",
+    "20260331_171933",
+    "20260331_173830",
+    "20260331_173943",
+    "20260331_175107",
+    "20260331_180055"
+  ],
+  "segments_count": 6,
+  "gaps_count": 5,
+  "gap_durations_s": [
+    289,
+    33,
+    30,
+    39,
+    32
+  ],
+  "duplicates_removed": 0,
+  "incomplete_segments": 0,
+  "import_mode": "pipeline_rr_v2",
+  "gap_reviews": [
+    {
+      "decision_key": "20260331_160336->20260331_171933",
+      "prev_session_id": "20260331_160336",
+      "next_session_id": "20260331_171933",
+      "gap_s": 289,
+      "status": "user_confirmed_merge",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-31T17:14:56.954000",
+      "start_next": "2026-03-31T17:19:45.937000"
+    },
+    {
+      "decision_key": "20260331_171933->20260331_173830",
+      "prev_session_id": "20260331_171933",
+      "next_session_id": "20260331_173830",
+      "gap_s": 33,
+      "status": "user_confirmed_merge",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-31T17:38:11.109000",
+      "start_next": "2026-03-31T17:38:44.545000"
+    },
+    {
+      "decision_key": "20260331_173830->20260331_173943",
+      "prev_session_id": "20260331_173830",
+      "next_session_id": "20260331_173943",
+      "gap_s": 30,
+      "status": "user_confirmed_merge",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-31T17:39:26.122000",
+      "start_next": "2026-03-31T17:39:56.061000"
+    },
+    {
+      "decision_key": "20260331_173943->20260331_175107",
+      "prev_session_id": "20260331_173943",
+      "next_session_id": "20260331_175107",
+      "gap_s": 39,
+      "status": "user_confirmed_merge",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-31T17:50:38.860000",
+      "start_next": "2026-03-31T17:51:18.111000"
+    },
+    {
+      "decision_key": "20260331_175107->20260331_180055",
+      "prev_session_id": "20260331_175107",
+      "next_session_id": "20260331_180055",
+      "gap_s": 32,
+      "status": "user_confirmed_merge",
+      "merge": true,
+      "requires_confirmation": true,
+      "start_prev": "2026-03-31T18:00:38.841000",
+      "start_next": "2026-03-31T18:01:10.436000"
+    }
+  ],
+  "activity_family": "judo",
+  "activity_label": "judo > randoris > TW",
+  "activity_notes": null,
+  "judo_session_type": "randoris",
+  "judo_phases": [
+    {
+      "phase_index": 0,
+      "phase_uid": "phase_1",
+      "phase_label": "echauffement",
+      "phase_category": "echauffement",
+      "needs_randori_details": false
+    },
+    {
+      "phase_index": 1,
+      "phase_uid": "phase_2",
+      "phase_label": "randoris TW",
+      "phase_category": "randoris",
+      "needs_randori_details": true
+    }
+  ],
+  "judo_randori_blocks": [
+    {
+      "phase_index": 1,
+      "phase_uid": "phase_2",
+      "randori_kind": "TW",
+      "randori_count": 7,
+      "randori_duration_min": 4.0,
+      "rest_between_randoris_min": 2.5
+    }
+  ],
+  "is_activity_annotated": true,
+  "activity_annotated_at": "2026-04-01T16:47:55.234939",
+  "is_archived": false,
+  "is_temporally_annotated": true,
+  "updated_at": "2026-04-01T22:07:50.069484",
+  "fc_phase_segments": [
+    {
+      "segment_index": 0,
+      "label": "echauffement",
+      "start_offset_s": 0.0,
+      "end_offset_s": 4333.423,
+      "duration_s": 4333.423,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 1,
+      "label": "randori",
+      "start_offset_s": 4333.423,
+      "end_offset_s": 4590.799,
+      "duration_s": 257.376,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 2,
+      "label": "recuperation",
+      "start_offset_s": 4590.799,
+      "end_offset_s": 4747.607,
+      "duration_s": 156.808,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 3,
+      "label": "randori",
+      "start_offset_s": 4747.607,
+      "end_offset_s": 4938.956,
+      "duration_s": 191.349,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 4,
+      "label": "recuperation",
+      "start_offset_s": 4938.956,
+      "end_offset_s": 5089.302,
+      "duration_s": 150.346,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 5,
+      "label": "randori",
+      "start_offset_s": 5089.302,
+      "end_offset_s": 5469.234,
+      "duration_s": 379.932,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 6,
+      "label": "recuperation",
+      "start_offset_s": 5469.234,
+      "end_offset_s": 5603.517,
+      "duration_s": 134.283,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 7,
+      "label": "randori",
+      "start_offset_s": 5603.517,
+      "end_offset_s": 5838.512,
+      "duration_s": 234.995,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 8,
+      "label": "recuperation",
+      "start_offset_s": 5838.512,
+      "end_offset_s": 6017.556,
+      "duration_s": 179.044,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 9,
+      "label": "randori",
+      "start_offset_s": 6017.556,
+      "end_offset_s": 6280.527,
+      "duration_s": 262.971,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 10,
+      "label": "recuperation",
+      "start_offset_s": 6280.527,
+      "end_offset_s": 6532.307,
+      "duration_s": 251.78,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 11,
+      "label": "randori",
+      "start_offset_s": 6532.307,
+      "end_offset_s": 6784.088,
+      "duration_s": 251.781,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 12,
+      "label": "recuperation",
+      "start_offset_s": 6784.088,
+      "end_offset_s": 6951.941,
+      "duration_s": 167.853,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 13,
+      "label": "randori",
+      "start_offset_s": 6951.941,
+      "end_offset_s": 7252.537,
+      "duration_s": 300.596,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 14,
+      "label": "retour_calme",
+      "start_offset_s": 7252.537,
+      "end_offset_s": 7312.5,
+      "duration_s": 59.963,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    }
+  ],
+  "temporally_annotated_at": "2026-04-01T16:48:10.861660"
+}

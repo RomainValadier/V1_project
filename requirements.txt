@@ -1,2 +1,4 @@
-﻿pandas
+pandas
+plotly
 streamlit
+streamlit-calendar

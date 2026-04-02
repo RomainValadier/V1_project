@@ -46,6 +46,20 @@ class ProcessedSession:
     rr_clean_filepath: str | None = None
     fc_clean_filepath: str | None = None
     clean_export_timestamp: str | None = None
+    activity_family: str | None = None
+    activity_label: str | None = None
+    is_activity_annotated: bool | None = None
+    activity_annotated_at: str | None = None
+    is_archived: bool | None = None
+    archived_at: str | None = None
+    updated_at: str | None = None
+    judo_session_type: str | None = None
+    judo_phases: list[dict] | None = None
+    judo_randori_blocks: list[dict] | None = None
+    activity_notes: str | None = None
+    fc_phase_segments: list[dict] | None = None
+    is_temporally_annotated: bool | None = None
+    temporally_annotated_at: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProcessedSession":
@@ -86,4 +100,18 @@ class ProcessedSession:
             "rr_clean_filepath": self.rr_clean_filepath,
             "fc_clean_filepath": self.fc_clean_filepath,
             "clean_export_timestamp": self.clean_export_timestamp,
+            "activity_family": self.activity_family,
+            "activity_label": self.activity_label,
+            "is_activity_annotated": self.is_activity_annotated,
+            "activity_annotated_at": self.activity_annotated_at,
+            "is_archived": self.is_archived,
+            "archived_at": self.archived_at,
+            "updated_at": self.updated_at,
+            "judo_session_type": self.judo_session_type,
+            "judo_phases": self.judo_phases,
+            "judo_randori_blocks": self.judo_randori_blocks,
+            "activity_notes": self.activity_notes,
+            "fc_phase_segments": self.fc_phase_segments,
+            "is_temporally_annotated": self.is_temporally_annotated,
+            "temporally_annotated_at": self.temporally_annotated_at,
         }

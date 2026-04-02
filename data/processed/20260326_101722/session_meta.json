@@ -44,5 +44,170 @@
   ],
   "rr_clean_filepath": "clean\\20260326_101722\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260326_101722\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-03-31T09:53:47.608532"
+  "clean_export_timestamp": "2026-03-31T22:31:14.252929",
+  "activity_family": "judo",
+  "activity_label": "judo > randoris > TW",
+  "activity_notes": "Seance fortes",
+  "judo_session_type": "randoris",
+  "judo_phases": [
+    {
+      "phase_index": 0,
+      "phase_uid": "phase_1",
+      "phase_label": "echauffement",
+      "phase_category": "echauffement",
+      "needs_randori_details": false
+    },
+    {
+      "phase_index": 1,
+      "phase_uid": "phase_2",
+      "phase_label": "randoris TW",
+      "phase_category": "randoris",
+      "needs_randori_details": true
+    },
+    {
+      "phase_index": 2,
+      "phase_uid": "phase_3",
+      "phase_label": "technique",
+      "phase_category": "technique",
+      "needs_randori_details": false
+    }
+  ],
+  "judo_randori_blocks": [
+    {
+      "phase_index": 1,
+      "phase_uid": "phase_2",
+      "randori_kind": "TW",
+      "randori_count": 5,
+      "randori_duration_min": 5.0,
+      "rest_between_randoris_min": "NA"
+    }
+  ],
+  "is_activity_annotated": true,
+  "activity_annotated_at": "2026-04-01T09:58:11.656831",
+  "is_archived": false,
+  "updated_at": "2026-04-01T16:16:50.693913",
+  "fc_phase_segments": [
+    {
+      "segment_index": 0,
+      "label": "echauffement",
+      "start_offset_s": 0.0,
+      "end_offset_s": 3712.888,
+      "duration_s": 3712.888,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 1,
+      "label": "randori",
+      "start_offset_s": 3712.888,
+      "end_offset_s": 4012.888,
+      "duration_s": 300.0,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 2,
+      "label": "recuperation",
+      "start_offset_s": 4012.888,
+      "end_offset_s": 4584.548,
+      "duration_s": 571.66,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 3,
+      "label": "randori",
+      "start_offset_s": 4584.548,
+      "end_offset_s": 4829.058,
+      "duration_s": 244.51,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 4,
+      "label": "recuperation",
+      "start_offset_s": 4829.058,
+      "end_offset_s": 5003.746,
+      "duration_s": 174.688,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 5,
+      "label": "randori",
+      "start_offset_s": 5003.746,
+      "end_offset_s": 5286.648,
+      "duration_s": 282.902,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 6,
+      "label": "recuperation",
+      "start_offset_s": 5286.648,
+      "end_offset_s": 5410.506,
+      "duration_s": 123.858,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 7,
+      "label": "randori",
+      "start_offset_s": 5410.506,
+      "end_offset_s": 5725.557,
+      "duration_s": 315.051,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 8,
+      "label": "recuperation",
+      "start_offset_s": 5725.557,
+      "end_offset_s": 5873.438,
+      "duration_s": 147.881,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 9,
+      "label": "randori",
+      "start_offset_s": 5873.438,
+      "end_offset_s": 6177.629,
+      "duration_s": 304.191,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 10,
+      "label": "technique",
+      "start_offset_s": 6177.629,
+      "end_offset_s": 7146.465,
+      "duration_s": 968.836,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 11,
+      "label": "retour_calme",
+      "start_offset_s": 7146.465,
+      "end_offset_s": 8519.178,
+      "duration_s": 1372.713,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    }
+  ],
+  "is_temporally_annotated": true,
+  "temporally_annotated_at": "2026-04-01T10:58:39.923934"
 }

@@ -29,5 +29,18 @@
   "gap_reviews": [],
   "rr_clean_filepath": "clean\\20260319_121914\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260319_121914\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-03-30T15:49:56.883737"
+  "clean_export_timestamp": "2026-03-30T15:49:56.883737",
+  "activity_family": "judo",
+  "activity_label": "judo > technique",
+  "activity_notes": null,
+  "judo_session_type": "technique",
+  "judo_phases": null,
+  "judo_randori_blocks": null,
+  "is_activity_annotated": true,
+  "activity_annotated_at": "2026-04-01T22:14:24.741280",
+  "is_archived": false,
+  "fc_phase_segments": null,
+  "is_temporally_annotated": false,
+  "temporally_annotated_at": null,
+  "updated_at": "2026-04-01T22:14:24.741280"
 }

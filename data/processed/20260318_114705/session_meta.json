@@ -3,7 +3,7 @@
   "device_id": "EBAF6822",
   "date": "2026-03-18",
   "heure_debut": "11:47:17",
-  "annotation": "20260318_114705",
+  "annotation": "footing recup",
   "fc_start_ts": "2026-03-18T11:47:17.761000",
   "nb_battements_rr": 6140,
   "nb_points_hr": 2948,
@@ -29,5 +29,18 @@
   "gap_reviews": [],
   "rr_clean_filepath": "clean\\20260318_114705\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260318_114705\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-03-31T09:58:48.101829"
+  "clean_export_timestamp": "2026-03-31T09:58:48.101829",
+  "activity_family": "prepa",
+  "activity_label": "prepa > cardio aerobie",
+  "activity_notes": null,
+  "judo_session_type": null,
+  "judo_phases": null,
+  "judo_randori_blocks": null,
+  "is_activity_annotated": true,
+  "activity_annotated_at": "2026-04-01T22:14:49.064431",
+  "is_archived": false,
+  "fc_phase_segments": null,
+  "is_temporally_annotated": false,
+  "temporally_annotated_at": null,
+  "updated_at": "2026-04-01T22:15:04.737212"
 }
