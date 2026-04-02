@@ -134,3 +134,19 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 - Correction de la selection du dernier segment dans l'editeur FC : un clic sur la derniere zone ne bascule plus par erreur sur le segment precedent lorsque le curseur tombe au niveau d'une borne partagee.
 - Refonte de l'HMI du panneau `Segment actif` : edition regroupee du type et des bornes, actions explicites `Ajouter a gauche`, `Ajouter a droite`, `Supprimer`, et recalage automatique de la timeline apres insertion ou suppression.
 - Correction de la synchronisation entre le clic dans le graphe FC et le panneau `Segment actif` : un changement de segment selectionne declenche maintenant un rerun immediat pour afficher sans decalage les bonnes informations et actions d'edition.
+- Ajout d'un `RPE global de seance` persistant dans les metadonnees d'activite, avec affichage dans le resume de la seance et edition directe depuis `Gestion activites`.
+- Extension des blocs `judo > randoris` pour stocker un `RPE` et un petit commentaire pour chaque repetition de randori, selon le nombre de randoris renseigne dans la phase.
+- Ajustement du flux d'edition des seances `judo > randoris` : l'utilisateur construit d'abord toute la sequence des phases, clique sur `Enregistrer`, puis seulement ensuite les formulaires de detail par phase randori apparaissent ; tant que la sequence courante n'est pas enregistree, les details fins restent masques pour eviter les reinitialisations pendant la construction de seance.
+- Correction d'un decalage intermittent entre le graphe FC et le panneau `Segment actif` : le composant front renvoie maintenant aussi l'index du segment selectionne, ce qui stabilise la synchronisation avec le panneau d'edition Streamlit meme quand l'identifiant interne et la position visuelle divergent temporairement.
+- Ajout d'une vue `Synthese finale` pour les seances totalement annotees : hero visuel avec illustration adaptee au type d'entrainement, resume des informations clefs, graphe FC segmente plus lisible, cartes de phases et detail du `RPE` global puis des `RPE` par randori.
+- Separation des usages : la page `Gestion activites` revient a son role d'edition, tandis qu'une nouvelle page `Visualisation activite` presente une lecture finale plus propre des seances annotees.
+- Creation du dossier `assets/activity_visuals/` avec un fichier guide `README.md` pour deposer ensuite des images locales par type d'entrainement et par phase.
+
+- Nettoyage de Gestion activites : suppression des derniers blocs visuels de synthese encore presents dans la page d'edition, maintenant entierement reportes vers Visualisation activite.
+
+- Simplification de Visualisation activite : suppression du resume illustre des phases de seance, et ajout dans le tableau des randoris de la duree manuellement renseignee pour chaque repetition.
+
+- Le tableau RPE des randoris de Visualisation activite affiche maintenant la duree reelle de chaque combat a partir des segments andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans les champs de saisie.
+
+- Stabilisation des formulaires de Gestion activites : rechargement des valeurs a partir d'une signature persistante de la seance et re-association des blocs randori via phase_uid pour conserver les parametres enregistres lors des retours sur une activite annotee.
+- Evolution de Visualisation activite : ajout d'un calendrier de selection comme dans Gestion activites, et remplacement du filtre seances completes par un filtre nnotees seulement afin d'afficher aussi les seances deja annotees meme si les RPE ne sont pas encore renseignes.

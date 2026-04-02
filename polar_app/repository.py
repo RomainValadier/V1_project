@@ -168,6 +168,7 @@ class ProcessedSessionRepository:
         activity_family = self._normalize_string(payload.get("activity_family"))
         activity_label = self._normalize_string(payload.get("activity_label"))
         activity_notes = self._normalize_string(payload.get("activity_notes"))
+        session_rpe = self._normalize_optional_int(payload.get("session_rpe"))
         judo_session_type = self._normalize_string(payload.get("judo_session_type")) if activity_family == "judo" else None
         judo_phases = self._normalize_dict_list(payload.get("judo_phases")) if activity_family == "judo" and judo_session_type == "randoris" else None
         judo_randori_blocks = self._normalize_dict_list(payload.get("judo_randori_blocks")) if activity_family == "judo" and judo_session_type == "randoris" else None
@@ -184,6 +185,7 @@ class ProcessedSessionRepository:
         meta["activity_family"] = activity_family
         meta["activity_label"] = activity_label
         meta["activity_notes"] = activity_notes
+        meta["session_rpe"] = session_rpe
         meta["judo_session_type"] = judo_session_type
         meta["judo_phases"] = judo_phases
         meta["judo_randori_blocks"] = judo_randori_blocks
@@ -705,6 +707,15 @@ class ProcessedSessionRepository:
         if hr_frame is not None and not hr_frame.empty and "t_offset_ms" in hr_frame.columns:
             return max(float(hr_frame["t_offset_ms"].max()) / 1000.0, float(session.duree_s or 0.0))
         return float(session.duree_s or 0.0)
+
+    @staticmethod
+    def _normalize_optional_int(value: Any) -> int | None:
+        if value in (None, "", "NA"):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _normalize_string(value: Any) -> str | None:

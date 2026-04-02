@@ -115,7 +115,7 @@
   "activity_annotated_at": "2026-04-01T16:51:16.173355",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-01T16:53:49.708944",
+  "updated_at": "2026-04-02T16:01:34.474265",
   "fc_phase_segments": [
     {
       "segment_index": 0,
@@ -161,8 +161,8 @@
       "segment_index": 4,
       "label": "recuperation",
       "start_offset_s": 3663.73,
-      "end_offset_s": 3767.972,
-      "duration_s": 104.242,
+      "end_offset_s": 3724.518,
+      "duration_s": 60.788,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -170,9 +170,9 @@
     {
       "segment_index": 5,
       "label": "randori",
-      "start_offset_s": 3767.972,
+      "start_offset_s": 3724.518,
       "end_offset_s": 4636.662,
-      "duration_s": 868.69,
+      "duration_s": 912.144,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -181,28 +181,18 @@
       "segment_index": 6,
       "label": "recuperation",
       "start_offset_s": 4636.662,
-      "end_offset_s": 4899.438,
-      "duration_s": 262.776,
+      "end_offset_s": 4758.253,
+      "duration_s": 121.591,
       "source": "manual",
       "phase_uid": null,
       "locked": false
     },
     {
       "segment_index": 7,
-      "label": "randori",
-      "start_offset_s": 4899.438,
-      "end_offset_s": 5695.1,
-      "duration_s": 795.662,
-      "source": "manual",
-      "phase_uid": null,
-      "locked": false
-    },
-    {
-      "segment_index": 8,
       "label": "retour_calme",
-      "start_offset_s": 5695.1,
+      "start_offset_s": 4758.253,
       "end_offset_s": 5755.069,
-      "duration_s": 59.969,
+      "duration_s": 996.816,
       "source": "manual",
       "phase_uid": null,
       "locked": false

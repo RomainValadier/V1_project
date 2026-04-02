@@ -57,6 +57,7 @@ class ProcessedSession:
     judo_phases: list[dict] | None = None
     judo_randori_blocks: list[dict] | None = None
     activity_notes: str | None = None
+    session_rpe: int | None = None
     fc_phase_segments: list[dict] | None = None
     is_temporally_annotated: bool | None = None
     temporally_annotated_at: str | None = None
@@ -111,6 +112,7 @@ class ProcessedSession:
             "judo_phases": self.judo_phases,
             "judo_randori_blocks": self.judo_randori_blocks,
             "activity_notes": self.activity_notes,
+            "session_rpe": self.session_rpe,
             "fc_phase_segments": self.fc_phase_segments,
             "is_temporally_annotated": self.is_temporally_annotated,
             "temporally_annotated_at": self.temporally_annotated_at,

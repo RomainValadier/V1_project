@@ -85,7 +85,7 @@
   "is_activity_annotated": true,
   "activity_annotated_at": "2026-04-01T09:58:11.656831",
   "is_archived": false,
-  "updated_at": "2026-04-01T16:16:50.693913",
+  "updated_at": "2026-04-02T16:01:58.963685",
   "fc_phase_segments": [
     {
       "segment_index": 0,
@@ -101,8 +101,8 @@
       "segment_index": 1,
       "label": "randori",
       "start_offset_s": 3712.888,
-      "end_offset_s": 4012.888,
-      "duration_s": 300.0,
+      "end_offset_s": 3986.126,
+      "duration_s": 273.238,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -110,9 +110,9 @@
     {
       "segment_index": 2,
       "label": "recuperation",
-      "start_offset_s": 4012.888,
+      "start_offset_s": 3986.126,
       "end_offset_s": 4584.548,
-      "duration_s": 571.66,
+      "duration_s": 598.422,
       "source": "manual",
       "phase_uid": null,
       "locked": false

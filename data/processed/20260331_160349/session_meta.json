@@ -96,7 +96,7 @@
   ],
   "activity_family": "judo",
   "activity_label": "judo > randoris > TW",
-  "activity_notes": null,
+  "activity_notes": "seance séelctionné avec utchikomi",
   "judo_session_type": "randoris",
   "judo_phases": [
     {
@@ -112,6 +112,13 @@
       "phase_label": "randoris TW",
       "phase_category": "randoris",
       "needs_randori_details": true
+    },
+    {
+      "phase_index": 2,
+      "phase_uid": "phase_3",
+      "phase_label": "autres",
+      "phase_category": "autres",
+      "needs_randori_details": false
     }
   ],
   "judo_randori_blocks": [
@@ -119,23 +126,55 @@
       "phase_index": 1,
       "phase_uid": "phase_2",
       "randori_kind": "TW",
-      "randori_count": 7,
-      "randori_duration_min": 4.0,
-      "rest_between_randoris_min": 2.5
+      "randori_count": 6,
+      "randori_duration_min": 5.0,
+      "rest_between_randoris_min": "NA",
+      "randori_entries": [
+        {
+          "repetition_index": 1,
+          "rpe": null,
+          "comment": null
+        },
+        {
+          "repetition_index": 2,
+          "rpe": null,
+          "comment": null
+        },
+        {
+          "repetition_index": 3,
+          "rpe": null,
+          "comment": null
+        },
+        {
+          "repetition_index": 4,
+          "rpe": null,
+          "comment": null
+        },
+        {
+          "repetition_index": 5,
+          "rpe": null,
+          "comment": null
+        },
+        {
+          "repetition_index": 6,
+          "rpe": null,
+          "comment": null
+        }
+      ]
     }
   ],
   "is_activity_annotated": true,
   "activity_annotated_at": "2026-04-01T16:47:55.234939",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-01T22:07:50.069484",
+  "updated_at": "2026-04-02T22:50:44.020507",
   "fc_phase_segments": [
     {
       "segment_index": 0,
       "label": "echauffement",
       "start_offset_s": 0.0,
-      "end_offset_s": 4333.423,
-      "duration_s": 4333.423,
+      "end_offset_s": 4701.583,
+      "duration_s": 4701.583,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -143,9 +182,9 @@
     {
       "segment_index": 1,
       "label": "randori",
-      "start_offset_s": 4333.423,
-      "end_offset_s": 4590.799,
-      "duration_s": 257.376,
+      "start_offset_s": 4701.583,
+      "end_offset_s": 4934.749,
+      "duration_s": 233.166,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -153,9 +192,9 @@
     {
       "segment_index": 2,
       "label": "recuperation",
-      "start_offset_s": 4590.799,
-      "end_offset_s": 4747.607,
-      "duration_s": 156.808,
+      "start_offset_s": 4934.749,
+      "end_offset_s": 5089.191,
+      "duration_s": 154.442,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -163,9 +202,9 @@
     {
       "segment_index": 3,
       "label": "randori",
-      "start_offset_s": 4747.607,
-      "end_offset_s": 4938.956,
-      "duration_s": 191.349,
+      "start_offset_s": 5089.191,
+      "end_offset_s": 5461.341,
+      "duration_s": 372.15,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -173,9 +212,9 @@
     {
       "segment_index": 4,
       "label": "recuperation",
-      "start_offset_s": 4938.956,
-      "end_offset_s": 5089.302,
-      "duration_s": 150.346,
+      "start_offset_s": 5461.341,
+      "end_offset_s": 5603.519,
+      "duration_s": 142.178,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -183,9 +222,9 @@
     {
       "segment_index": 5,
       "label": "randori",
-      "start_offset_s": 5089.302,
-      "end_offset_s": 5469.234,
-      "duration_s": 379.932,
+      "start_offset_s": 5603.519,
+      "end_offset_s": 5842.379,
+      "duration_s": 238.86,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -193,9 +232,9 @@
     {
       "segment_index": 6,
       "label": "recuperation",
-      "start_offset_s": 5469.234,
-      "end_offset_s": 5603.517,
-      "duration_s": 134.283,
+      "start_offset_s": 5842.379,
+      "end_offset_s": 6007.305,
+      "duration_s": 164.926,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -203,9 +242,9 @@
     {
       "segment_index": 7,
       "label": "randori",
-      "start_offset_s": 5603.517,
-      "end_offset_s": 5838.512,
-      "duration_s": 234.995,
+      "start_offset_s": 6007.305,
+      "end_offset_s": 6274.6,
+      "duration_s": 267.295,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -213,9 +252,9 @@
     {
       "segment_index": 8,
       "label": "recuperation",
-      "start_offset_s": 5838.512,
-      "end_offset_s": 6017.556,
-      "duration_s": 179.044,
+      "start_offset_s": 6274.6,
+      "end_offset_s": 6525.316,
+      "duration_s": 250.716,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -223,9 +262,9 @@
     {
       "segment_index": 9,
       "label": "randori",
-      "start_offset_s": 6017.556,
-      "end_offset_s": 6280.527,
-      "duration_s": 262.971,
+      "start_offset_s": 6525.316,
+      "end_offset_s": 6796.22,
+      "duration_s": 270.904,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -233,9 +272,9 @@
     {
       "segment_index": 10,
       "label": "recuperation",
-      "start_offset_s": 6280.527,
-      "end_offset_s": 6532.307,
-      "duration_s": 251.78,
+      "start_offset_s": 6796.22,
+      "end_offset_s": 6955.984,
+      "duration_s": 159.764,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -243,43 +282,24 @@
     {
       "segment_index": 11,
       "label": "randori",
-      "start_offset_s": 6532.307,
-      "end_offset_s": 6784.088,
-      "duration_s": 251.781,
+      "start_offset_s": 6955.984,
+      "end_offset_s": 7316.01,
+      "duration_s": 360.026,
       "source": "manual",
       "phase_uid": null,
       "locked": false
     },
     {
       "segment_index": 12,
-      "label": "recuperation",
-      "start_offset_s": 6784.088,
-      "end_offset_s": 6951.941,
-      "duration_s": 167.853,
-      "source": "manual",
-      "phase_uid": null,
-      "locked": false
-    },
-    {
-      "segment_index": 13,
-      "label": "randori",
-      "start_offset_s": 6951.941,
-      "end_offset_s": 7252.537,
-      "duration_s": 300.596,
-      "source": "manual",
-      "phase_uid": null,
-      "locked": false
-    },
-    {
-      "segment_index": 14,
-      "label": "retour_calme",
-      "start_offset_s": 7252.537,
-      "end_offset_s": 7312.5,
-      "duration_s": 59.963,
+      "label": "technique",
+      "start_offset_s": 7316.01,
+      "end_offset_s": 7407.944,
+      "duration_s": 91.934,
       "source": "manual",
       "phase_uid": null,
       "locked": false
     }
   ],
-  "temporally_annotated_at": "2026-04-01T16:48:10.861660"
+  "temporally_annotated_at": "2026-04-01T16:48:10.861660",
+  "session_rpe": 8
 }

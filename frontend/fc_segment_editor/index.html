@@ -375,11 +375,16 @@
       });
     }
 
+    function getSelectedSegmentIndex() {
+      return state.segments.findIndex(segment => Number(segment.id) === Number(state.selectedSegmentId));
+    }
+
     function sendSelection() {
       setComponentValue({
         event_id: ++state.eventId,
         event_type: 'segment_selected',
         selected_segment_id: state.selectedSegmentId,
+        selected_segment_index: getSelectedSegmentIndex(),
         segments: cloneSegments(state.segments),
       });
     }
@@ -389,6 +394,7 @@
         event_id: ++state.eventId,
         event_type: 'segments_updated',
         selected_segment_id: state.selectedSegmentId,
+        selected_segment_index: getSelectedSegmentIndex(),
         segments: cloneSegments(state.segments),
       });
     }

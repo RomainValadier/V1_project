@@ -26,6 +26,7 @@ RANDORI_KIND_OPTIONS = ["TW", "NW pure", "mixtes (NW + TW)", "libres"]
 RANDORI_DURATION_OPTIONS = [f"{value:.1f}" for value in [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]]
 RANDORI_COUNT_OPTIONS = ["NA"] + [str(value) for value in range(1, 31)]
 RANDORI_REST_OPTIONS = ["NA"] + [f"{value:.1f}" for value in [index / 2 for index in range(1, 21)]]
+RPE_OPTIONS = ["NA"] + [str(value) for value in range(1, 11)]
 RANDORI_PHASE_LABELS = {"randoris TW", "randoris NW pure", "randoris libres"}
 TEMPORAL_SEGMENT_LABELS = ["echauffement", "technique", "randori", "recuperation", "retour_calme", "autre"]
 TEMPORAL_SEGMENT_COLORS = {
@@ -192,6 +193,26 @@ def phase_category(phase_label: str) -> str:
     return "randoris" if phase_is_randori(phase_label) else phase_label
 
 
+def saved_phase_labels(session) -> list[str]:
+    labels: list[str] = []
+    for phase in session.judo_phases or []:
+        if not isinstance(phase, dict):
+            continue
+        label = str(phase.get("phase_label") or phase.get("label") or "").strip()
+        if label:
+            labels.append(label)
+    return labels
+
+
+def current_phase_labels(session_id: str) -> list[str]:
+    labels: list[str] = []
+    for item in st.session_state.get(f"phase_items_{session_id}", []):
+        phase_uid = item.get("phase_uid")
+        fallback_label = item.get("phase_label") or "echauffement"
+        labels.append(str(st.session_state.get(f"phase_label_{session_id}_{phase_uid}", fallback_label)))
+    return labels
+
+
 def default_randori_kind(phase_label: str) -> str:
     if phase_label == "randoris TW":
         return "TW"
@@ -206,6 +227,19 @@ def to_optional_number(raw_value: str | None, integer: bool = False) -> str | in
     if raw_value in (None, "", "NA"):
         return "NA"
     return int(raw_value) if integer else float(raw_value)
+
+
+def to_optional_int(raw_value: str | None) -> int | None:
+    if raw_value in (None, "", "NA"):
+        return None
+    return int(raw_value)
+
+
+def to_optional_text(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    text = str(raw_value).strip()
+    return text or None
 
 
 def highlight_selected_event(events: list[dict[str, Any]], selected_session_id: str | None) -> list[dict[str, Any]]:
@@ -223,7 +257,6 @@ def highlight_selected_event(events: list[dict[str, Any]], selected_session_id: 
             event_copy["extendedProps"]["is_selected"] = True
         highlighted_events.append(event_copy)
     return highlighted_events
-
 
 
 def temporal_segments_key(session_id: str) -> str:
@@ -707,12 +740,18 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
         if event_id > last_event_id:
             st.session_state[temporal_component_event_key(session_id)] = event_id
             selected_segment_id = component_value.get("selected_segment_id")
+            selected_segment_component_index = component_value.get("selected_segment_index")
             previous_selected_segment_index = st.session_state.get(temporal_selected_segment_key(session_id))
-            if selected_segment_id is not None:
-                st.session_state[temporal_selected_segment_key(session_id)] = int(selected_segment_id)
-                selected_segment_index = int(selected_segment_id)
+            next_selected_segment_index = None
+            if selected_segment_component_index is not None:
+                next_selected_segment_index = int(selected_segment_component_index)
+            elif selected_segment_id is not None:
+                next_selected_segment_index = int(selected_segment_id)
+            if next_selected_segment_index is not None:
+                st.session_state[temporal_selected_segment_key(session_id)] = next_selected_segment_index
+                selected_segment_index = next_selected_segment_index
             if component_value.get("event_type") == "segment_selected":
-                if selected_segment_id is not None and previous_selected_segment_index != int(selected_segment_id):
+                if next_selected_segment_index is not None and previous_selected_segment_index != next_selected_segment_index:
                     st.rerun()
             elif component_value.get("event_type") == "segments_updated":
                 raw_segments = component_value.get("segments") or []
@@ -899,15 +938,27 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
 
 def initialize_form_state(session, repository: ProcessedSessionRepository) -> None:
     selected_session_key = "activity_form_session_id"
-    if st.session_state.get(selected_session_key) == session.session_id:
+    form_signature_key = "activity_form_session_signature"
+    session_id = session.session_id
+    form_signature = (
+        session_id,
+        str(getattr(session, "updated_at", None) or ""),
+        str(getattr(session, "activity_annotated_at", None) or ""),
+        str(getattr(session, "temporally_annotated_at", None) or ""),
+        len(session.judo_phases or []),
+        len(session.judo_randori_blocks or []),
+        len(session.fc_phase_segments or []),
+    )
+    if st.session_state.get(selected_session_key) == session_id and st.session_state.get(form_signature_key) == form_signature:
         return
 
-    session_id = session.session_id
     st.session_state[selected_session_key] = session_id
+    st.session_state[form_signature_key] = form_signature
     st.session_state[f"annotation_input_{session_id}"] = session.annotation or session.session_id
     st.session_state[f"activity_family_{session_id}"] = session.activity_family or ""
     st.session_state[f"activity_label_{session_id}"] = session.activity_label or ""
     st.session_state[f"activity_notes_{session_id}"] = session.activity_notes or ""
+    st.session_state[f"session_rpe_{session_id}"] = str(getattr(session, "session_rpe", None)) if getattr(session, "session_rpe", None) is not None else "NA"
     st.session_state[f"judo_session_type_{session_id}"] = session.judo_session_type or "technique"
     normalized_segments = repository.normalize_fc_phase_segments(
         [dict(item) for item in (session.fc_phase_segments or [])],
@@ -922,19 +973,34 @@ def initialize_form_state(session, repository: ProcessedSessionRepository) -> No
     st.session_state[temporal_component_event_key(session_id)] = 0
 
     phase_items: list[dict[str, Any]] = []
+    max_phase_counter = 0
     for index, stored_phase in enumerate(session.judo_phases or [], start=1):
         phase_uid = stored_phase.get("phase_uid") or f"phase_{index}"
         phase_label = stored_phase.get("phase_label") or stored_phase.get("label") or "echauffement"
         phase_items.append({"phase_uid": phase_uid, "phase_label": phase_label})
+        if isinstance(phase_uid, str) and phase_uid.startswith("phase_"):
+            try:
+                max_phase_counter = max(max_phase_counter, int(phase_uid.split("_")[-1]))
+            except ValueError:
+                pass
     st.session_state[f"phase_items_{session_id}"] = phase_items
-    st.session_state[f"phase_counter_{session_id}"] = len(phase_items)
+    st.session_state[f"phase_counter_{session_id}"] = max(max_phase_counter, len(phase_items))
 
-    randori_blocks = {block.get("phase_index"): block for block in (session.judo_randori_blocks or [])}
+    randori_blocks_by_uid = {
+        str(block.get("phase_uid")): block
+        for block in (session.judo_randori_blocks or [])
+        if isinstance(block, dict) and block.get("phase_uid")
+    }
+    randori_blocks_by_index = {
+        block.get("phase_index"): block
+        for block in (session.judo_randori_blocks or [])
+        if isinstance(block, dict)
+    }
     for phase_index, phase_item in enumerate(phase_items):
         phase_uid = phase_item["phase_uid"]
         phase_label = phase_item["phase_label"]
         st.session_state[f"phase_label_{session_id}_{phase_uid}"] = phase_label
-        block = randori_blocks.get(phase_index, {})
+        block = randori_blocks_by_uid.get(str(phase_uid)) or randori_blocks_by_index.get(phase_index, {})
         kind_default = str(block.get("randori_kind") or default_randori_kind(phase_label))
         count_default = str(block.get("randori_count") or "NA")
         rest_default = str(block.get("rest_between_randoris_min") or "NA")
@@ -943,6 +1009,27 @@ def initialize_form_state(session, repository: ProcessedSessionRepository) -> No
         st.session_state[f"randori_count_{session_id}_{phase_uid}"] = count_default
         st.session_state[f"randori_rest_{session_id}_{phase_uid}"] = rest_default
         st.session_state[f"randori_duration_{session_id}_{phase_uid}"] = duration_default
+        randori_entries = block.get("randori_entries") or []
+        entries_by_index: dict[int, dict[str, Any]] = {}
+        for entry in randori_entries:
+            if not isinstance(entry, dict):
+                continue
+            repetition_index = entry.get("repetition_index")
+            if repetition_index is None:
+                continue
+            try:
+                entries_by_index[int(repetition_index)] = entry
+            except (TypeError, ValueError):
+                continue
+        try:
+            count_int = int(block.get("randori_count")) if block.get("randori_count") not in (None, "", "NA") else 0
+        except (TypeError, ValueError):
+            count_int = 0
+        for repetition_index in range(1, count_int + 1):
+            entry = entries_by_index.get(repetition_index, {})
+            entry_rpe = entry.get("rpe")
+            st.session_state[f"randori_rpe_{session_id}_{phase_uid}_{repetition_index}"] = str(entry_rpe) if entry_rpe not in (None, "", "NA") else "NA"
+            st.session_state[f"randori_comment_{session_id}_{phase_uid}_{repetition_index}"] = str(entry.get("comment") or "")
 
 
 def append_phase(session_id: str, phase_label: str) -> None:
@@ -998,14 +1085,26 @@ def build_phase_payload(session_id: str) -> tuple[list[dict[str, Any]], list[dic
         )
         if not needs_randori_details:
             continue
+        randori_count = to_optional_number(st.session_state.get(f"randori_count_{session_id}_{phase_uid}"), integer=True)
+        randori_entries: list[dict[str, Any]] = []
+        if isinstance(randori_count, int) and randori_count > 0:
+            for repetition_index in range(1, randori_count + 1):
+                randori_entries.append(
+                    {
+                        "repetition_index": repetition_index,
+                        "rpe": to_optional_int(st.session_state.get(f"randori_rpe_{session_id}_{phase_uid}_{repetition_index}")),
+                        "comment": to_optional_text(st.session_state.get(f"randori_comment_{session_id}_{phase_uid}_{repetition_index}")),
+                    }
+                )
         randori_blocks.append(
             {
                 "phase_index": phase_index,
                 "phase_uid": phase_uid,
                 "randori_kind": st.session_state.get(f"randori_kind_{session_id}_{phase_uid}", default_randori_kind(phase_label)),
-                "randori_count": to_optional_number(st.session_state.get(f"randori_count_{session_id}_{phase_uid}"), integer=True),
+                "randori_count": randori_count,
                 "randori_duration_min": to_optional_number(st.session_state.get(f"randori_duration_{session_id}_{phase_uid}"), integer=False),
                 "rest_between_randoris_min": to_optional_number(st.session_state.get(f"randori_rest_{session_id}_{phase_uid}"), integer=False),
+                "randori_entries": randori_entries,
             }
         )
     return phases, randori_blocks
@@ -1050,12 +1149,13 @@ def render_session_summary(session, hr_frame: pd.DataFrame, repository: Processe
     fc_min = int(hr_valid["bpm"].min()) if not hr_valid.empty else session.bpm_min
     fc_max = int(hr_valid["bpm"].max()) if not hr_valid.empty else session.bpm_max
 
-    cols = st.columns(5)
+    cols = st.columns(6)
     cols[0].metric("Duree", format_duration(session.duree_s))
     cols[1].metric("FC min brute", f"{fc_min} bpm")
     cols[2].metric("FC max brute", f"{fc_max} bpm")
     cols[3].metric("Heure debut", format_datetime_label(start_dt))
     cols[4].metric("Heure fin", format_datetime_label(end_dt))
+    cols[5].metric("RPE seance", str(session.session_rpe) if getattr(session, "session_rpe", None) is not None else "-")
 
 
 def render_status_pills(session) -> None:
@@ -1185,6 +1285,7 @@ def main() -> None:
     family_key = f"activity_family_{session_id}"
     label_key = f"activity_label_{session_id}"
     notes_key = f"activity_notes_{session_id}"
+    session_rpe_key = f"session_rpe_{session_id}"
     judo_type_key = f"judo_session_type_{session_id}"
 
     form_col1, form_col2 = st.columns(2)
@@ -1226,7 +1327,11 @@ def main() -> None:
             st.session_state[judo_type_key] = "technique"
             st.session_state[label_key] = ""
 
-    st.text_area("Notes generales", key=notes_key, height=100)
+    notes_cols = st.columns([2.1, 1.0])
+    with notes_cols[0]:
+        st.text_area("Notes generales", key=notes_key, height=100)
+    with notes_cols[1]:
+        st.selectbox("RPE global de seance", options=RPE_OPTIONS, key=session_rpe_key)
 
     if st.session_state.get(family_key) == "judo" and st.session_state.get(judo_type_key) == "randoris":
         render_section_label("Phases judo")
@@ -1245,6 +1350,7 @@ def main() -> None:
         if not phase_items:
             st.info("Ajoute les phases de la seance pour decrire l'ordre : echauffement, technique, randoris TW, technique, etc.")
 
+        phase_rows: list[tuple[int, str, str]] = []
         for index, phase_item in enumerate(phase_items):
             phase_uid = phase_item["phase_uid"]
             phase_label_key = f"phase_label_{session_id}_{phase_uid}"
@@ -1265,26 +1371,67 @@ def main() -> None:
             if row_cols[4].button("Retirer", key=f"remove_phase_{session_id}_{phase_uid}", use_container_width=True):
                 remove_phase(session_id, phase_uid)
                 st.rerun()
+            phase_rows.append((index, phase_uid, st.session_state.get(phase_label_key, phase_item["phase_label"])))
 
-            current_phase_label = st.session_state.get(phase_label_key, phase_item["phase_label"])
-            if not phase_is_randori(current_phase_label):
-                continue
+        current_labels = current_phase_labels(session_id)
+        persisted_labels = saved_phase_labels(session)
+        has_randori_phase = any(phase_is_randori(label) for label in current_labels)
+        randori_details_unlocked = bool(persisted_labels) and current_labels == persisted_labels
 
-            render_section_label(f"Details randoris phase {index + 1}")
-            kind_key = f"randori_kind_{session_id}_{phase_uid}"
-            count_key = f"randori_count_{session_id}_{phase_uid}"
-            duration_key = f"randori_duration_{session_id}_{phase_uid}"
-            rest_key = f"randori_rest_{session_id}_{phase_uid}"
-            if kind_key not in st.session_state:
-                st.session_state[kind_key] = default_randori_kind(current_phase_label)
-            detail_cols = st.columns(4)
-            detail_cols[0].selectbox("Categorie randori", options=RANDORI_KIND_OPTIONS, key=kind_key)
-            detail_cols[1].selectbox("Nombre de randoris", options=RANDORI_COUNT_OPTIONS, key=count_key)
-            duration_options = ["NA"] + RANDORI_DURATION_OPTIONS if st.session_state.get(kind_key) == "libres" else RANDORI_DURATION_OPTIONS
-            if st.session_state.get(duration_key) not in duration_options:
-                st.session_state[duration_key] = duration_options[0]
-            detail_cols[2].selectbox("Duree d'un randori (min)", options=duration_options, key=duration_key)
-            detail_cols[3].selectbox("Repos entre randoris (min)", options=RANDORI_REST_OPTIONS, key=rest_key)
+        if has_randori_phase and not randori_details_unlocked:
+            st.info("Commence par definir toute la seance puis clique sur Enregistrer. Les details des phases de randoris apparaitront ensuite seulement.")
+        elif has_randori_phase:
+            render_section_label("Details des phases randoris")
+            for index, phase_uid, current_phase_label in phase_rows:
+                if not phase_is_randori(current_phase_label):
+                    continue
+
+                render_section_label(f"Details randoris phase {index + 1}")
+                kind_key = f"randori_kind_{session_id}_{phase_uid}"
+                count_key = f"randori_count_{session_id}_{phase_uid}"
+                duration_key = f"randori_duration_{session_id}_{phase_uid}"
+                rest_key = f"randori_rest_{session_id}_{phase_uid}"
+                if kind_key not in st.session_state:
+                    st.session_state[kind_key] = default_randori_kind(current_phase_label)
+                detail_cols = st.columns(4)
+                detail_cols[0].selectbox("Categorie randori", options=RANDORI_KIND_OPTIONS, key=kind_key)
+                detail_cols[1].selectbox("Nombre de randoris", options=RANDORI_COUNT_OPTIONS, key=count_key)
+                duration_options = ["NA"] + RANDORI_DURATION_OPTIONS if st.session_state.get(kind_key) == "libres" else RANDORI_DURATION_OPTIONS
+                if st.session_state.get(duration_key) not in duration_options:
+                    st.session_state[duration_key] = duration_options[0]
+                detail_cols[2].selectbox("Duree d'un randori (min)", options=duration_options, key=duration_key)
+                detail_cols[3].selectbox("Repos entre randoris (min)", options=RANDORI_REST_OPTIONS, key=rest_key)
+
+                selected_count = st.session_state.get(count_key, "NA")
+                try:
+                    repetition_count = int(selected_count) if selected_count not in (None, "", "NA") else 0
+                except (TypeError, ValueError):
+                    repetition_count = 0
+                if repetition_count > 0:
+                    st.caption("Renseigne le RPE et un petit commentaire pour chaque randori de cette phase.")
+                    for repetition_index in range(1, repetition_count + 1):
+                        rpe_key = f"randori_rpe_{session_id}_{phase_uid}_{repetition_index}"
+                        comment_key = f"randori_comment_{session_id}_{phase_uid}_{repetition_index}"
+                        if rpe_key not in st.session_state:
+                            st.session_state[rpe_key] = "NA"
+                        if comment_key not in st.session_state:
+                            st.session_state[comment_key] = ""
+                        repetition_cols = st.columns([0.75, 1.0, 3.25])
+                        repetition_cols[0].markdown(f"**{repetition_index}.**")
+                        repetition_cols[1].selectbox(
+                            "RPE",
+                            options=RPE_OPTIONS,
+                            key=rpe_key,
+                            label_visibility="collapsed",
+                        )
+                        repetition_cols[2].text_input(
+                            "Commentaire",
+                            key=comment_key,
+                            label_visibility="collapsed",
+                            placeholder="Commentaire rapide sur ce randori",
+                        )
+                else:
+                    st.info("Renseigne d'abord le nombre de randoris pour annoter le RPE et les commentaires repetition par repetition.")
 
     action_cols = st.columns(3)
     if action_cols[0].button("Enregistrer", type="primary", use_container_width=True):
@@ -1293,6 +1440,7 @@ def main() -> None:
             "activity_family": st.session_state.get(family_key) or None,
             "activity_label": st.session_state.get(label_key) or None,
             "activity_notes": st.session_state.get(notes_key) or None,
+            "session_rpe": to_optional_int(st.session_state.get(session_rpe_key)),
         }
         if st.session_state.get(family_key) == "judo":
             payload["judo_session_type"] = st.session_state.get(judo_type_key)
@@ -1341,5 +1489,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
