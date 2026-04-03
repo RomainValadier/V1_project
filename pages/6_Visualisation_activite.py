@@ -24,6 +24,8 @@ SELECTED_EVENT_BACKGROUND = '#f59e0b'
 SELECTED_EVENT_BORDER = '#b45309'
 SELECTED_EVENT_TEXT = '#1f2937'
 
+RPE_OPTIONS = ['NA'] + [str(value) for value in range(1, 11)]
+
 TEMPORAL_SEGMENT_COLORS = {
     'echauffement': 'rgba(234, 179, 8, 0.18)',
     'technique': 'rgba(59, 130, 246, 0.18)',
@@ -121,7 +123,7 @@ def inject_styles() -> None:
         }
         .summary-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 0.75rem;
             margin-top: 0.75rem;
         }
@@ -288,8 +290,8 @@ def randori_feedback_rows(session) -> list[dict[str, Any]]:
         phase_index = int(block.get('phase_index', len(rows)))
         phase_label = phases_by_index.get(phase_index, f'Phase {phase_index + 1}')
         randori_kind = str(block.get('randori_kind') or 'randori')
-        phase_uid = block.get('phase_uid')
-        phase_durations = list(durations_by_phase_uid.get(str(phase_uid), [])) if phase_uid else []
+        phase_uid = str(block.get('phase_uid') or '')
+        phase_durations = list(durations_by_phase_uid.get(phase_uid, [])) if phase_uid else []
         entries = [entry for entry in (block.get('randori_entries') or []) if isinstance(entry, dict)]
         entries_by_index = {}
         for entry in entries:
@@ -302,10 +304,10 @@ def randori_feedback_rows(session) -> list[dict[str, Any]]:
                 continue
         count_value = block.get('randori_count')
         try:
-            repetition_count = int(count_value) if count_value not in (None, '', 'NA') else len(entries_by_index)
+            explicit_count = int(count_value) if count_value not in (None, '', 'NA') else None
         except (TypeError, ValueError):
-            repetition_count = len(entries_by_index)
-        repetition_count = max(repetition_count, len(entries_by_index), len(phase_durations))
+            explicit_count = None
+        repetition_count = explicit_count if explicit_count is not None else max(len(entries_by_index), len(phase_durations))
         for repetition_index in range(1, repetition_count + 1):
             entry = entries_by_index.get(repetition_index, {})
             if repetition_index - 1 < len(phase_durations):
@@ -320,11 +322,71 @@ def randori_feedback_rows(session) -> list[dict[str, Any]]:
                     'Type': randori_kind,
                     'Randori': repetition_index,
                     'Duree': randori_duration_label,
-                    'RPE': entry.get('rpe'),
-                    'Commentaire': str(entry.get('comment') or '').strip() or '-',
+                    'RPE': str(entry.get('rpe')) if entry.get('rpe') not in (None, '', 'NA') else 'NA',
+                    'Commentaire': str(entry.get('comment') or '').strip(),
+                    '_phase_uid': phase_uid,
+                    '_phase_index': phase_index,
+                    '_row_order': len(rows),
+                    'Supprimer': False,
                 }
             )
     return rows
+
+
+def build_visual_randori_editor_frame(session) -> pd.DataFrame:
+    rows = randori_feedback_rows(session)
+    if not rows:
+        return pd.DataFrame(columns=['Phase', 'Type', 'Randori', 'Duree', 'RPE', 'Commentaire', '_phase_uid', '_phase_index', '_row_order', 'Supprimer'])
+    return pd.DataFrame(rows)
+
+
+def save_visual_randori_feedback(session, editor_frame: pd.DataFrame, repository: ProcessedSessionRepository) -> None:
+    if session.activity_family != 'judo' or session.judo_session_type != 'randoris':
+        return
+    if editor_frame is None:
+        return
+
+    working_frame = editor_frame.copy()
+    if 'Supprimer' not in working_frame.columns:
+        working_frame['Supprimer'] = False
+    kept_rows = working_frame.loc[~working_frame['Supprimer'].fillna(False)].copy()
+    if '_row_order' in kept_rows.columns:
+        kept_rows = kept_rows.sort_values(['_phase_index', '_row_order', 'Randori'], kind='stable')
+
+    updated_blocks: list[dict[str, Any]] = []
+    for block in session.judo_randori_blocks or []:
+        if not isinstance(block, dict):
+            continue
+        phase_uid = str(block.get('phase_uid') or '')
+        block_rows = kept_rows.loc[kept_rows['_phase_uid'].astype(str) == phase_uid].copy() if phase_uid else pd.DataFrame(columns=kept_rows.columns)
+        entries: list[dict[str, Any]] = []
+        for repetition_index, (_, row) in enumerate(block_rows.iterrows(), start=1):
+            raw_rpe = row.get('RPE')
+            rpe_value = None if raw_rpe in (None, '', 'NA') else int(raw_rpe)
+            comment_value = str(row.get('Commentaire') or '').strip() or None
+            entries.append(
+                {
+                    'repetition_index': repetition_index,
+                    'rpe': rpe_value,
+                    'comment': comment_value,
+                }
+            )
+        updated_block = dict(block)
+        updated_block['randori_count'] = len(entries)
+        updated_block['randori_entries'] = entries
+        updated_blocks.append(updated_block)
+
+    payload = {
+        'annotation': session.annotation,
+        'activity_family': session.activity_family,
+        'activity_label': session.activity_label,
+        'activity_notes': session.activity_notes,
+        'session_rpe': getattr(session, 'session_rpe', None),
+        'judo_session_type': session.judo_session_type,
+        'judo_phases': session.judo_phases,
+        'judo_randori_blocks': updated_blocks,
+    }
+    repository.update_activity_metadata(session.session_id, payload)
 
 
 def is_session_fully_annotated(session) -> bool:
@@ -424,26 +486,56 @@ def render_visual_overview(session, hr_frame: pd.DataFrame, repository: Processe
     fc_min = int(hr_valid['bpm'].min()) if not hr_valid.empty else session.bpm_min
     fc_max = int(hr_valid['bpm'].max()) if not hr_valid.empty else session.bpm_max
     feedback_rows = randori_feedback_rows(session)
-    feedback_with_rpe = [row for row in feedback_rows if row.get('RPE') is not None]
+    feedback_with_rpe = [row for row in feedback_rows if row.get('RPE') not in (None, '', 'NA')]
     mean_randori_rpe = round(sum(int(row['RPE']) for row in feedback_with_rpe) / len(feedback_with_rpe), 1) if feedback_with_rpe else None
+    session_rpe_label = str(session.session_rpe) if getattr(session, 'session_rpe', None) is not None else '-'
 
     hero_cols = st.columns([1.0, 1.35], gap='large')
     with hero_cols[0]:
         render_visual_asset(main_visual, 'visuel activite')
     with hero_cols[1]:
         st.markdown(
-            f'''<div class="visual-copy"><h3>{html.escape(session.annotation or session.session_id)}</h3><p>Lecture finale de la seance, pensee pour comprendre en quelques secondes le contexte de l'entrainement, la dynamique cardiaque et le ressenti associe.</p><div class="pill-row"><span class="pill">{html.escape(session.activity_family or 'famille non renseignee')}</span><span class="pill">{html.escape(session.activity_label or 'activite non renseignee')}</span><span class="pill">RPE seance : {html.escape(str(session.session_rpe) if getattr(session, 'session_rpe', None) is not None else '-')}</span></div><div class="summary-grid"><div class="summary-card"><div class="summary-label">Duree</div><div class="summary-value">{html.escape(format_duration(session.duree_s))}</div></div><div class="summary-card"><div class="summary-label">FC min / max</div><div class="summary-value">{fc_min} / {fc_max}</div></div><div class="summary-card"><div class="summary-label">Debut / fin</div><div class="summary-value">{html.escape(format_datetime_label(start_dt))} - {html.escape(format_datetime_label(end_dt))}</div></div><div class="summary-card"><div class="summary-label">RPE moyen randori</div><div class="summary-value">{mean_randori_rpe if mean_randori_rpe is not None else '-'}</div></div></div><div class="soft-note">{html.escape(session.activity_notes or 'Aucune note generale renseignee pour cette seance.')}</div></div>''',
+            f'''<div class="visual-copy"><h3>{html.escape(session.annotation or session.session_id)}</h3><p>Lecture finale de la seance, pensee pour comprendre en quelques secondes le contexte de l'entrainement, la dynamique cardiaque et le ressenti associe.</p><div class="pill-row"><span class="pill">{html.escape(session.activity_family or 'famille non renseignee')}</span><span class="pill">{html.escape(session.activity_label or 'activite non renseignee')}</span></div><div class="summary-grid"><div class="summary-card"><div class="summary-label">Duree</div><div class="summary-value">{html.escape(format_duration(session.duree_s))}</div></div><div class="summary-card"><div class="summary-label">FC min / max</div><div class="summary-value">{fc_min} / {fc_max}</div></div><div class="summary-card"><div class="summary-label">Debut / fin</div><div class="summary-value">{html.escape(format_datetime_label(start_dt))} - {html.escape(format_datetime_label(end_dt))}</div></div><div class="summary-card"><div class="summary-label">RPE seance</div><div class="summary-value">{session_rpe_label}</div></div><div class="summary-card"><div class="summary-label">RPE moyen randori</div><div class="summary-value">{mean_randori_rpe if mean_randori_rpe is not None else '-'}</div></div></div><div class="soft-note">{html.escape(session.activity_notes or 'Aucune note generale renseignee pour cette seance.')}</div></div>''',
             unsafe_allow_html=True,
         )
 
-    if session.fc_phase_segments:
-        total_duration_s = max(float(session.duree_s or 0.0), float(hr_frame['t_offset_ms'].max()) / 1000.0 if not hr_frame.empty else 0.0)
-        fig = build_hr_figure(hr_frame, session.fc_phase_segments, total_duration_s)
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    render_section_label('Frequence cardiaque')
+    total_duration_s = max(float(session.duree_s or 0.0), float(hr_frame['t_offset_ms'].max()) / 1000.0 if not hr_frame.empty else 0.0)
+    fig = build_hr_figure(hr_frame, session.fc_phase_segments, total_duration_s)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-    if feedback_rows:
+    if session.activity_family == 'judo' and session.judo_session_type == 'randoris':
         render_section_label('RPE des randoris')
-        st.dataframe(pd.DataFrame(feedback_rows), use_container_width=True, hide_index=True)
+        editor_frame = build_visual_randori_editor_frame(session)
+        if editor_frame.empty:
+            st.info('Aucun randori renseigne pour cette seance.')
+        else:
+            st.caption("Clique directement dans la colonne RPE pour modifier la note. Coche la colonne corbeille puis enregistre pour supprimer un randori.")
+            editor_key = f"visual_randori_editor_{session.session_id}_{session.updated_at or ''}_{len(editor_frame)}"
+            edited_frame = st.data_editor(
+                editor_frame,
+                use_container_width=True,
+                hide_index=True,
+                num_rows='fixed',
+                disabled=['Phase', 'Type', 'Randori', 'Duree', '_phase_uid', '_phase_index', '_row_order'],
+                column_config={
+                    'Phase': st.column_config.TextColumn('Phase'),
+                    'Type': st.column_config.TextColumn('Type'),
+                    'Randori': st.column_config.NumberColumn('Randori', format='%d'),
+                    'Duree': st.column_config.TextColumn('Duree'),
+                    'RPE': st.column_config.SelectboxColumn('RPE', options=RPE_OPTIONS, required=False),
+                    'Commentaire': st.column_config.TextColumn('Commentaire', width='large'),
+                    'Supprimer': st.column_config.CheckboxColumn('Corbeille', help='Supprimer ce randori'),
+                    '_phase_uid': None,
+                    '_phase_index': None,
+                    '_row_order': None,
+                },
+                key=editor_key,
+            )
+            if st.button('Enregistrer les modifications randoris', key=f'save_visual_randoris_{session.session_id}', type='primary'):
+                save_visual_randori_feedback(session, edited_frame, repository)
+                st.session_state['selected_visual_activity_id'] = session.session_id
+                st.rerun()
 
 
 def main() -> None:

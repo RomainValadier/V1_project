@@ -150,3 +150,5 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
 - Stabilisation des formulaires de Gestion activites : rechargement des valeurs a partir d'une signature persistante de la seance et re-association des blocs randori via phase_uid pour conserver les parametres enregistres lors des retours sur une activite annotee.
 - Evolution de Visualisation activite : ajout d'un calendrier de selection comme dans Gestion activites, et remplacement du filtre seances completes par un filtre nnotees seulement afin d'afficher aussi les seances deja annotees meme si les RPE ne sont pas encore renseignes.
+
+- Visualisation activite affiche maintenant le graphe FC pour toutes les activites, ajoute le RPE seance dans le dashboard resume, et permet d'editer directement les randoris via un tableau interactif avec edition du RPE, commentaire, et suppression par ligne avant sauvegarde.

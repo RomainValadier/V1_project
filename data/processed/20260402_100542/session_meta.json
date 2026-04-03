@@ -83,7 +83,7 @@
   ],
   "rr_clean_filepath": "clean\\20260402_100542\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260402_100542\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-02T22:02:54.332552",
+  "clean_export_timestamp": "2026-04-03T09:13:46.948872",
   "activity_family": "judo",
   "activity_label": "judo > randoris > TW",
   "activity_notes": "Seance randoris surface 5*5",
@@ -160,7 +160,7 @@
   "activity_annotated_at": "2026-04-02T15:16:58.026692",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-02T22:04:43.710539",
+  "updated_at": "2026-04-03T09:20:08.640310",
   "fc_phase_segments": [
     {
       "segment_index": 0,
@@ -176,8 +176,8 @@
       "segment_index": 1,
       "label": "randori",
       "start_offset_s": 4060.742,
-      "end_offset_s": 4403.15,
-      "duration_s": 342.408,
+      "end_offset_s": 4395.576,
+      "duration_s": 334.834,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -185,9 +185,9 @@
     {
       "segment_index": 2,
       "label": "recuperation",
-      "start_offset_s": 4403.15,
+      "start_offset_s": 4395.576,
       "end_offset_s": 4749.509,
-      "duration_s": 346.359,
+      "duration_s": 353.933,
       "source": "manual",
       "phase_uid": null,
       "locked": false

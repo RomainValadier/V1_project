@@ -2,7 +2,7 @@
   "session_id": "20260402_100542",
   "source_rr_filepath": "processed\\20260402_100542\\rr.parquet",
   "source_hr_filepath": "processed\\20260402_100542\\hr.parquet",
-  "export_timestamp": "2026-04-02T22:02:54.332552",
+  "export_timestamp": "2026-04-03T09:13:46.948872",
   "fc_clean_window_seconds": 5.0,
   "fc_clean_window_mode": "trailing_seconds",
   "fc_clean_min_viable_points": 2,
