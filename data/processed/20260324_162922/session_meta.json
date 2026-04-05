@@ -109,7 +109,7 @@
   ],
   "rr_clean_filepath": "clean\\20260324_162922\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260324_162922\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-03-30T15:51:45.356230",
+  "clean_export_timestamp": "2026-04-05T17:59:47.320092",
   "activity_family": "judo",
   "activity_label": "judo > randoris > TW",
   "activity_notes": null,

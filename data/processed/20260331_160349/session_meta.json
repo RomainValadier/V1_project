@@ -301,5 +301,8 @@
     }
   ],
   "temporally_annotated_at": "2026-04-01T16:48:10.861660",
-  "session_rpe": 8
+  "session_rpe": 8,
+  "rr_clean_filepath": "clean\\20260331_160349\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260331_160349\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-04-05T18:01:23.360425"
 }

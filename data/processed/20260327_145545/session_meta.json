@@ -198,5 +198,8 @@
       "locked": false
     }
   ],
-  "temporally_annotated_at": "2026-04-01T16:51:19.057823"
+  "temporally_annotated_at": "2026-04-01T16:51:19.057823",
+  "rr_clean_filepath": "clean\\20260327_145545\\rr_clean.parquet",
+  "fc_clean_filepath": "clean\\20260327_145545\\fc_clean.parquet",
+  "clean_export_timestamp": "2026-04-05T18:00:41.133848"
 }
