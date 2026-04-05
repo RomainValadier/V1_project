@@ -152,3 +152,7 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 - Evolution de Visualisation activite : ajout d'un calendrier de selection comme dans Gestion activites, et remplacement du filtre seances completes par un filtre nnotees seulement afin d'afficher aussi les seances deja annotees meme si les RPE ne sont pas encore renseignes.
 
 - Visualisation activite affiche maintenant le graphe FC pour toutes les activites, ajoute le RPE seance dans le dashboard resume, et permet d'editer directement les randoris via un tableau interactif avec edition du RPE, commentaire, et suppression par ligne avant sauvegarde.
+
+- Refonte UX de Gestion activites : nouveau header compact avec badges et 6 metriques, formulaire Description de seance en deux colonnes, bloc Description randoris en cartes horizontales, et badge de statut de segmentation en bas de page.
+- Refonte UX de la segmentation temporelle dans Gestion activites : barre haute avec segment actif + annuler/retablir, popover d'actions sur le segment, panneau Segment selectionne compacte, et resume des phases replie par defaut.
+- Correction de l'etat UI de Gestion activites : synchronisation du type du segment actif lors des changements de selection, numerotation stable du resume des phases, et reintroduction explicite des variables de contexte de formulaire pour eviter les erreurs runtime dans le nouveau layout.

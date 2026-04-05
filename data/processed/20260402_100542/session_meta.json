@@ -83,7 +83,7 @@
   ],
   "rr_clean_filepath": "clean\\20260402_100542\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260402_100542\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-03T09:13:46.948872",
+  "clean_export_timestamp": "2026-04-05T17:00:03.672909",
   "activity_family": "judo",
   "activity_label": "judo > randoris > TW",
   "activity_notes": "Seance randoris surface 5*5",

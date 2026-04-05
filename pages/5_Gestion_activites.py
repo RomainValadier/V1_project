@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -48,6 +49,14 @@ TEMPORAL_SEGMENT_HEX_COLORS = {
 SELECTED_EVENT_BACKGROUND = "#f59e0b"
 SELECTED_EVENT_BORDER = "#b45309"
 SELECTED_EVENT_TEXT = "#1f2937"
+SEGMENT_UI_PALETTE = {
+    "echauffement": {"bg": "rgba(93,202,165,0.3)", "border": "#1D9E75", "text": "#085041"},
+    "randori": {"bg": "rgba(240,153,123,0.3)", "border": "#D85A30", "text": "#712B13"},
+    "recuperation": {"bg": "rgba(133,183,235,0.3)", "border": "#378ADD", "text": "#0C447C"},
+    "technique": {"bg": "rgba(206,203,246,0.3)", "border": "#534AB7", "text": "#3C3489"},
+    "retour_calme": {"bg": "rgba(211,209,199,0.3)", "border": "#888780", "text": "#444441"},
+    "autre": {"bg": "rgba(250,199,117,0.3)", "border": "#BA7517", "text": "#633806"},
+}
 FC_SEGMENT_EDITOR = fc_segment_editor
 
 
@@ -124,6 +133,17 @@ def inject_styles() -> None:
             box-shadow: 0 10px 26px rgba(41, 60, 47, 0.05);
             margin-bottom: 1rem;
         }
+        div.stButton > button[kind=\"primary\"] {
+            background-color: #1D9E75;
+            color: white;
+            font-weight: 500;
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+        }
+        div.stButton > button[kind=\"secondary\"] {
+            border-radius: 10px;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -132,6 +152,145 @@ def inject_styles() -> None:
 
 def render_section_label(label: str) -> None:
     st.markdown(f'<div class="section-chip">{label}</div>', unsafe_allow_html=True)
+
+
+def terminal_category_label(raw_label: str | None) -> str:
+    if not raw_label:
+        return "-"
+    parts = [part.strip() for part in str(raw_label).split(">") if part.strip()]
+    return parts[-1] if parts else str(raw_label)
+
+
+def segment_palette(label: str | None) -> dict[str, str]:
+    normalized = str(label or "autre").strip().lower()
+    return SEGMENT_UI_PALETTE.get(normalized, SEGMENT_UI_PALETTE["autre"])
+
+
+def build_badge_html(label: str, *, tone: str = "default") -> str:
+    tone_map = {
+        "default": ("rgba(33,72,52,0.10)", "#214834"),
+        "warn": ("rgba(185,28,28,0.10)", "#991b1b"),
+        "muted": ("rgba(100,116,139,0.12)", "#475569"),
+        "success": ("rgba(29,158,117,0.14)", "#085041"),
+    }
+    background, color = tone_map.get(tone, tone_map["default"])
+    return f'<span style="display:inline-block;border-radius:999px;padding:0.32rem 0.78rem;font-size:0.78rem;font-weight:650;background:{background};color:{color};">{label}</span>'
+
+
+def build_segment_chip_html(label: str, suffix: str = "") -> str:
+    palette = segment_palette(label)
+    safe_label = terminal_category_label(label).replace('_', ' ')
+    suffix_markup = f" <span style='opacity:0.7'>{suffix}</span>" if suffix else ""
+    return (
+        f'<div style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.38rem 0.72rem;border-radius:999px;'
+        f'background:{palette["bg"]};border:1px solid {palette["border"]};color:{palette["text"]};font-size:0.8rem;font-weight:600;">'
+        f'{safe_label}{suffix_markup}</div>'
+    )
+
+
+def build_metric_card_html(label: str, value: str, unit: str = "") -> str:
+    unit_markup = f" <span style='font-size:0.74rem;color:#667066;font-weight:500'>{unit}</span>" if unit else ""
+    return (
+        "<div style='background:#f5f5f3;border-radius:8px;padding:12px;min-height:78px;'>"
+        f"<div style='font-size:11px;color:#6b7280;margin-bottom:6px;'>{label}</div>"
+        f"<div style='font-size:18px;font-weight:500;color:#163427;'>{value}{unit_markup}</div>"
+        "</div>"
+    )
+
+
+def chunked(items: list[Any], size: int) -> list[list[Any]]:
+    return [items[index:index + size] for index in range(0, len(items), size)]
+
+
+def temporal_history_key(session_id: str) -> str:
+    return f"fc_segments_history_{session_id}"
+
+
+def temporal_history_index_key(session_id: str) -> str:
+    return f"fc_segments_history_idx_{session_id}"
+
+
+def reset_temporal_history(session_id: str, segments: list[dict[str, Any]]) -> None:
+    st.session_state[temporal_history_key(session_id)] = [deepcopy(segments)]
+    st.session_state[temporal_history_index_key(session_id)] = 0
+
+
+def push_temporal_history(session_id: str, segments: list[dict[str, Any]]) -> None:
+    history_key = temporal_history_key(session_id)
+    history_index_key = temporal_history_index_key(session_id)
+    history = list(st.session_state.get(history_key, []))
+    current_index = int(st.session_state.get(history_index_key, -1))
+    snapshot = deepcopy(segments)
+    if history and current_index >= 0 and history[current_index] == snapshot:
+        return
+    history = history[: current_index + 1]
+    history.append(snapshot)
+    st.session_state[history_key] = history
+    st.session_state[history_index_key] = len(history) - 1
+
+
+def restore_temporal_history(session_id: str, repository: ProcessedSessionRepository, total_duration_s: float, direction: int) -> bool:
+    history = list(st.session_state.get(temporal_history_key(session_id), []))
+    if not history:
+        return False
+    current_index = int(st.session_state.get(temporal_history_index_key(session_id), 0))
+    target_index = current_index + direction
+    if target_index < 0 or target_index >= len(history):
+        return False
+    restored_segments = repository.normalize_fc_phase_segments(deepcopy(history[target_index]), total_duration_s)
+    st.session_state[temporal_history_index_key(session_id)] = target_index
+    st.session_state[temporal_segments_key(session_id)] = restored_segments
+    st.session_state[temporal_selected_segment_key(session_id)] = 0 if restored_segments else None
+    repository.save_fc_phase_segments(session_id, restored_segments)
+    return True
+
+
+def compute_segment_fc_mean(hr_frame: pd.DataFrame, segment: dict[str, Any] | None) -> str:
+    if segment is None or hr_frame.empty or 'bpm' not in hr_frame.columns:
+        return '-'
+    start_s = float(segment.get('start_offset_s', 0.0))
+    end_s = float(segment.get('end_offset_s', start_s))
+    frame = hr_frame.copy()
+    frame['t_offset_s'] = frame['t_offset_ms'].astype('float64') / 1000.0
+    window = frame.loc[(frame['t_offset_s'] >= start_s) & (frame['t_offset_s'] <= end_s) & frame['bpm'].notna()]
+    if window.empty:
+        return '-'
+    return f"{int(round(float(window['bpm'].mean())))} bpm"
+
+
+def split_selected_temporal_segment(session_id: str, new_label: str, total_duration_s: float, repository: ProcessedSessionRepository, side: str) -> bool:
+    selected_index = st.session_state.get(temporal_selected_segment_key(session_id))
+    segments = [dict(segment) for segment in st.session_state.get(temporal_segments_key(session_id), [])]
+    if selected_index is None or not (0 <= int(selected_index) < len(segments)):
+        return False
+    selected_index = int(selected_index)
+    segment = dict(segments[selected_index])
+    start_s = float(segment.get('start_offset_s', 0.0))
+    end_s = float(segment.get('end_offset_s', start_s))
+    duration_s = end_s - start_s
+    min_duration_s = float(repository.MIN_SEGMENT_DURATION_S)
+    if duration_s < min_duration_s * 2:
+        st.session_state['activity_management_notice'] = {'level': 'warning', 'message': 'Le segment est trop court pour etre decoupe.'}
+        return False
+    split_ratio = 0.3 if side == 'left' else 0.7
+    split_point = start_s + duration_s * split_ratio
+    split_point = max(start_s + min_duration_s, min(end_s - min_duration_s, split_point))
+    if side == 'left':
+        new_segment = {'label': new_label, 'start_offset_s': start_s, 'end_offset_s': split_point, 'source': 'manual', 'phase_uid': None, 'locked': False}
+        segment['start_offset_s'] = split_point
+        segments[selected_index] = segment
+        segments.insert(selected_index, new_segment)
+        new_index = selected_index
+    else:
+        new_segment = {'label': new_label, 'start_offset_s': split_point, 'end_offset_s': end_s, 'source': 'manual', 'phase_uid': None, 'locked': False}
+        segment['end_offset_s'] = split_point
+        segments[selected_index] = segment
+        segments.insert(selected_index + 1, new_segment)
+        new_index = selected_index + 1
+    if not persist_temporal_segments(session_id, segments, total_duration_s, repository):
+        return False
+    st.session_state[temporal_selected_segment_key(session_id)] = new_index
+    return True
 
 
 def render_notice() -> None:
@@ -394,17 +553,17 @@ def build_plotly_hr_figure(
     fig.add_vline(x=float(total_duration_s), line_color="rgba(71, 85, 105, 0.45)", line_width=1, line_dash="dash")
     for segment in segments:
         is_selected = selected_segment_index is not None and int(segment.get("segment_index", -1)) == int(selected_segment_index)
-        color = TEMPORAL_SEGMENT_COLORS.get(segment.get("label"), "rgba(99, 102, 241, 0.14)")
-        border_color = "#b45309" if is_selected else "rgba(30,41,59,0.28)"
+        palette = segment_palette(str(segment.get("label") or "autre"))
+        label = str(segment.get("label", "segment"))
         fig.add_vrect(
             x0=float(segment.get("start_offset_s", 0.0)),
             x1=float(segment.get("end_offset_s", 0.0)),
-            fillcolor=color,
-            opacity=0.96 if is_selected else 0.58,
+            fillcolor=palette["bg"],
+            opacity=0.45 if is_selected else 0.25,
             layer="below",
-            line_width=4 if is_selected else 1.5,
-            line_color=border_color,
-            annotation_text=str(segment.get("label", "segment")),
+            line_width=2 if is_selected else 1,
+            line_color=palette["border"] if is_selected else "rgba(30,41,59,0.24)",
+            annotation_text=f"{label}{' *' if is_selected else ''}".strip(),
             annotation_position="top left",
         )
     fig.update_layout(
@@ -438,6 +597,7 @@ def persist_temporal_segments(
     repository: ProcessedSessionRepository,
     *,
     anchor_index: int | None = None,
+    push_history_snapshot: bool = True,
 ) -> bool:
     try:
         if anchor_index is None:
@@ -452,6 +612,8 @@ def persist_temporal_segments(
         st.session_state["activity_management_notice"] = {"level": "error", "message": str(exc)}
         return False
     set_temporal_segments_state(session_id, saved_segments, total_duration_s, repository)
+    if push_history_snapshot:
+        push_temporal_history(session_id, saved_segments)
     return True
 
 
@@ -690,39 +852,37 @@ def update_selected_temporal_segment(
 
 def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repository: ProcessedSessionRepository) -> None:
     session_id = session.session_id
-    total_duration_s = max(float(session.duree_s or 0.0), float(hr_frame["t_offset_ms"].max()) / 1000.0 if not hr_frame.empty else 0.0)
+    total_duration_s = max(float(session.duree_s or 0.0), float(hr_frame['t_offset_ms'].max()) / 1000.0 if not hr_frame.empty else 0.0)
     segments = st.session_state.get(temporal_segments_key(session_id), [])
     selected_segment_index = st.session_state.get(temporal_selected_segment_key(session_id))
+    active_segment = None
+    if segments and selected_segment_index is not None and 0 <= int(selected_segment_index) < len(segments):
+        active_segment = segments[int(selected_segment_index)]
 
-    render_section_label("Annotations temporelles FC")
-    top_cols = st.columns([1.0, 1.0, 1.1, 1.0])
-    if top_cols[0].button("Auto-generer", key=f"generate_fc_segments_{session_id}", use_container_width=True):
-        try:
-            generated_segments = repository.generate_default_fc_phase_segments(session_id)
-            if persist_temporal_segments(session_id, generated_segments, total_duration_s, repository):
-                st.session_state[temporal_component_event_key(session_id)] = 0
-                st.session_state["activity_management_notice"] = {"level": "success", "message": f"Annotations temporelles generees pour {session_id}."}
+    history = st.session_state.get(temporal_history_key(session_id), [])
+    history_index = int(st.session_state.get(temporal_history_index_key(session_id), len(history) - 1 if history else 0))
+    can_undo = bool(history) and history_index > 0
+    can_redo = bool(history) and history_index < len(history) - 1
+
+    render_section_label('Segmentation temporelle')
+    top_bar = st.columns([2.8, 1.2])
+    with top_bar[0]:
+        if active_segment is None:
+            st.markdown(build_badge_html('Aucun segment selectionne', tone='muted'), unsafe_allow_html=True)
+        else:
+            label = str(active_segment.get('label') or 'autre')
+            summary = f"{format_offset_label(active_segment.get('start_offset_s'))} -> {format_offset_label(active_segment.get('end_offset_s'))} ({format_duration(active_segment.get('duration_s'))})"
+            st.markdown(build_segment_chip_html(label, summary), unsafe_allow_html=True)
+    with top_bar[1]:
+        undo_cols = st.columns(2)
+        if undo_cols[0].button('Annuler', disabled=not can_undo, use_container_width=True, key=f'undo_seg_{session_id}'):
+            if restore_temporal_history(session_id, repository, total_duration_s, -1):
+                st.session_state['activity_management_notice'] = {'level': 'success', 'message': 'Modification annulee.'}
                 st.rerun()
-        except Exception as exc:
-            st.session_state["activity_management_notice"] = {"level": "warning", "message": str(exc)}
-            st.rerun()
-    if top_cols[1].button("Reinitialiser", key=f"reset_fc_segments_{session_id}", use_container_width=True):
-        try:
-            generated_segments = repository.generate_default_fc_phase_segments(session_id)
-            if persist_temporal_segments(session_id, generated_segments, total_duration_s, repository):
-                st.session_state[temporal_component_event_key(session_id)] = 0
-                st.session_state["activity_management_notice"] = {"level": "success", "message": f"Annotations temporelles reinitialisees pour {session_id}."}
+        if undo_cols[1].button('Retablir', disabled=not can_redo, use_container_width=True, key=f'redo_seg_{session_id}'):
+            if restore_temporal_history(session_id, repository, total_duration_s, 1):
+                st.session_state['activity_management_notice'] = {'level': 'success', 'message': 'Modification retablie.'}
                 st.rerun()
-        except Exception as exc:
-            st.session_state["activity_management_notice"] = {"level": "warning", "message": str(exc)}
-            st.rerun()
-    top_cols[2].metric("Statut", temporal_status_label(segments))
-    top_cols[3].metric("Segments", str(len(segments)))
-
-    st.caption(
-        "Interaction : clic gauche dans un segment pour le selectionner, puis glisse un bord interne pour redimensionner la seance. Les segments restent contigus et aucune phase ne peut descendre sous 10 secondes."
-    )
-
 
     hr_points = build_hr_points_for_component(hr_frame)
     component_value = FC_SEGMENT_EDITOR(
@@ -731,209 +891,133 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
         selected_segment_id=None if selected_segment_index is None else int(selected_segment_index),
         min_duration_s=10,
         default=None,
-        key=f"fc_segment_editor_{session_id}",
+        key=f'fc_segment_editor_{session_id}',
     )
 
     if isinstance(component_value, dict):
-        event_id = int(component_value.get("event_id", 0) or 0)
+        event_id = int(component_value.get('event_id', 0) or 0)
         last_event_id = int(st.session_state.get(temporal_component_event_key(session_id), 0) or 0)
         if event_id > last_event_id:
             st.session_state[temporal_component_event_key(session_id)] = event_id
-            selected_segment_id = component_value.get("selected_segment_id")
-            selected_segment_component_index = component_value.get("selected_segment_index")
-            previous_selected_segment_index = st.session_state.get(temporal_selected_segment_key(session_id))
-            next_selected_segment_index = None
+            selected_segment_component_index = component_value.get('selected_segment_index')
             if selected_segment_component_index is not None:
-                next_selected_segment_index = int(selected_segment_component_index)
-            elif selected_segment_id is not None:
-                next_selected_segment_index = int(selected_segment_id)
-            if next_selected_segment_index is not None:
-                st.session_state[temporal_selected_segment_key(session_id)] = next_selected_segment_index
-                selected_segment_index = next_selected_segment_index
-            if component_value.get("event_type") == "segment_selected":
-                if next_selected_segment_index is not None and previous_selected_segment_index != next_selected_segment_index:
+                st.session_state[temporal_selected_segment_key(session_id)] = int(selected_segment_component_index)
+                selected_segment_index = int(selected_segment_component_index)
+            if component_value.get('event_type') == 'segment_selected':
+                st.rerun()
+            elif component_value.get('event_type') == 'segments_updated':
+                updated_segments = deserialize_temporal_segments_from_component(component_value.get('segments') or [])
+                if persist_temporal_segments(session_id, updated_segments, total_duration_s, repository):
+                    st.session_state['activity_management_notice'] = {'level': 'success', 'message': f'Segments temporels mis a jour pour {session_id}.'}
                     st.rerun()
-            elif component_value.get("event_type") == "segments_updated":
-                raw_segments = component_value.get("segments") or []
-                updated_segments = deserialize_temporal_segments_from_component(raw_segments)
-                if persist_temporal_segments(
-                    session_id,
-                    updated_segments,
-                    total_duration_s,
-                    repository,
-                ):
-                    segments = st.session_state.get(temporal_segments_key(session_id), [])
-                    st.session_state["activity_management_notice"] = {"level": "success", "message": f"Segments temporels mis a jour pour {session_id}."}
-                    st.rerun()
-            else:
-                segments = st.session_state.get(temporal_segments_key(session_id), [])
 
-    st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
+    segments = st.session_state.get(temporal_segments_key(session_id), [])
     selected_segment_index = st.session_state.get(temporal_selected_segment_key(session_id))
     active_segment = None
     if segments and selected_segment_index is not None and 0 <= int(selected_segment_index) < len(segments):
         active_segment = segments[int(selected_segment_index)]
 
-    action_cols = st.columns([1.65, 1.0])
-    with action_cols[0]:
-        render_section_label("Segment actif")
+    action_segment_key = f'popover_segment_type_{session_id}'
+    action_segment_sync_key = f'popover_segment_sync_{session_id}'
+    if active_segment is not None and (
+        action_segment_key not in st.session_state
+        or st.session_state.get(action_segment_sync_key) != int(selected_segment_index)
+    ):
+        st.session_state[action_segment_key] = str(active_segment.get('label') or 'autre')
+        st.session_state[action_segment_sync_key] = int(selected_segment_index)
+
+    with st.popover('Actions du segment', use_container_width=False):
         if active_segment is None:
-            st.info("Selectionne un segment dans le graphe pour afficher ses actions d'edition.")
+            st.caption('Selectionne d abord un segment dans le graphe.')
         else:
-            active_segment_index = int(selected_segment_index)
-            current_label = str(active_segment.get("label") or "autre")
-            current_start_s = float(active_segment.get("start_offset_s", 0.0))
-            current_end_s = float(active_segment.get("end_offset_s", 0.0))
-            current_duration_s = float(active_segment.get("duration_s", current_end_s - current_start_s))
-            signature = (
-                active_segment_index,
-                current_label,
-                round(current_start_s, 3),
-                round(current_end_s, 3),
-            )
-            selection_signature_key = f"selected_segment_signature_{session_id}"
-            active_type_key = f"selected_segment_type_{session_id}"
-            active_start_key = f"selected_segment_start_{session_id}"
-            active_end_key = f"selected_segment_end_{session_id}"
-            new_segment_label_key = f"new_temporal_segment_label_{session_id}"
-            if st.session_state.get(selection_signature_key) != signature:
-                st.session_state[selection_signature_key] = signature
-                st.session_state[active_type_key] = current_label if current_label in TEMPORAL_SEGMENT_LABELS else "autre"
-                st.session_state[active_start_key] = float(round(current_start_s, 1))
-                st.session_state[active_end_key] = float(round(current_end_s, 1))
-            if new_segment_label_key not in st.session_state:
-                st.session_state[new_segment_label_key] = current_label if current_label in TEMPORAL_SEGMENT_LABELS else "technique"
+            st.selectbox('Changer le type', options=TEMPORAL_SEGMENT_LABELS, key=action_segment_key)
+            if st.button('Appliquer', key=f'popover_apply_type_{session_id}', use_container_width=True):
+                if update_selected_temporal_segment(session_id, total_duration_s, repository, label=st.session_state.get(action_segment_key)):
+                    st.rerun()
+            st.markdown('---')
+            new_segment_key = f'popover_new_segment_type_{session_id}'
+            if new_segment_key not in st.session_state:
+                st.session_state[new_segment_key] = 'randori'
+            st.selectbox('Type du nouveau segment', options=TEMPORAL_SEGMENT_LABELS, key=new_segment_key)
+            insert_cols = st.columns(2)
+            if insert_cols[0].button('Inserer a gauche', key=f'popover_insert_left_{session_id}', use_container_width=True):
+                if split_selected_temporal_segment(session_id, st.session_state.get(new_segment_key, 'technique'), total_duration_s, repository, 'left'):
+                    st.rerun()
+            if insert_cols[1].button('Inserer a droite', key=f'popover_insert_right_{session_id}', use_container_width=True):
+                if split_selected_temporal_segment(session_id, st.session_state.get(new_segment_key, 'technique'), total_duration_s, repository, 'right'):
+                    st.rerun()
+            st.markdown('---')
+            confirm_key = f'confirm_delete_segment_{session_id}'
+            st.checkbox('Confirmer la suppression', key=confirm_key)
+            if st.button('Supprimer ce segment', key=f'popover_delete_{session_id}', use_container_width=True, disabled=not st.session_state.get(confirm_key, False)):
+                if delete_temporal_segment(session_id, total_duration_s, repository):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
 
-            st.markdown(
-                f"**Segment selectionne** : `{current_label}` de `{format_offset_label(current_start_s)}` a `{format_offset_label(current_end_s)}` ({format_duration(current_duration_s)})"
-            )
-
-            edit_cols = st.columns([1.15, 0.9, 0.9, 0.95])
-            with edit_cols[0]:
-                st.selectbox(
-                    "Type du segment",
-                    options=TEMPORAL_SEGMENT_LABELS,
-                    key=active_type_key,
-                )
-            with edit_cols[1]:
-                st.number_input(
-                    "Debut (s)",
-                    min_value=0.0,
-                    max_value=float(total_duration_s),
-                    step=1.0,
-                    key=active_start_key,
-                )
-            with edit_cols[2]:
-                st.number_input(
-                    "Fin (s)",
-                    min_value=0.0,
-                    max_value=float(total_duration_s),
-                    step=1.0,
-                    key=active_end_key,
-                )
-            with edit_cols[3]:
-                st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
-                if st.button(
-                    "Appliquer",
-                    key=f"apply_fc_segment_changes_{session_id}_{active_segment_index}",
-                    use_container_width=True,
-                ):
-                    if update_selected_temporal_segment(
-                        session_id,
-                        total_duration_s,
-                        repository,
-                        label=st.session_state.get(active_type_key, current_label),
-                        start_offset_s=float(st.session_state.get(active_start_key, current_start_s)),
-                        end_offset_s=float(st.session_state.get(active_end_key, current_end_s)),
-                    ):
-                        st.session_state["activity_management_notice"] = {
-                            "level": "success",
-                            "message": f"Segment mis a jour pour {session_id}.",
-                        }
-                        st.rerun()
-
-            st.caption("Ajouts et suppression : utilise les boutons ci-dessous apres avoir selectionne un segment. La timeline se recale automatiquement pour rester continue.")
-            insert_cols = st.columns([1.0, 1.0, 1.0, 1.0])
-            with insert_cols[0]:
-                st.selectbox(
-                    "Type du nouveau segment",
-                    options=TEMPORAL_SEGMENT_LABELS,
-                    key=new_segment_label_key,
-                )
-            with insert_cols[1]:
-                if st.button(
-                    "Ajouter a gauche",
-                    key=f"add_fc_segment_left_{session_id}_{active_segment_index}",
-                    use_container_width=True,
-                ):
-                    if add_temporal_segment(
-                        session_id,
-                        st.session_state.get(new_segment_label_key, "technique"),
-                        total_duration_s,
-                        repository,
-                        side="left",
-                    ):
-                        st.rerun()
-            with insert_cols[2]:
-                if st.button(
-                    "Ajouter a droite",
-                    key=f"add_fc_segment_right_{session_id}_{active_segment_index}",
-                    use_container_width=True,
-                ):
-                    if add_temporal_segment(
-                        session_id,
-                        st.session_state.get(new_segment_label_key, "technique"),
-                        total_duration_s,
-                        repository,
-                        side="right",
-                    ):
-                        st.rerun()
-            with insert_cols[3]:
-                if st.button(
-                    "Supprimer",
-                    key=f"delete_fc_segment_{session_id}_{active_segment_index}",
-                    use_container_width=True,
-                ):
-                    if delete_temporal_segment(session_id, total_duration_s, repository):
-                        st.rerun()
-
-    with action_cols[1]:
-        render_section_label("Validation")
-        if st.button(
-            "Valider segmentation",
-            key=f"validate_fc_segments_{session_id}",
-            use_container_width=True,
-            disabled=not segments,
-        ):
+    lower_cols = st.columns([3, 1])
+    with lower_cols[0]:
+        st.markdown("<div style='background:#f5f5f3;border-radius:12px;padding:16px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:0.85rem;color:#667066;margin-bottom:0.75rem;font-weight:600;'>Segment selectionne</div>", unsafe_allow_html=True)
+        if active_segment is None:
+            st.info('Clique sur un segment du graphe pour le selectionner.')
+        else:
+            selected_type_key = f'selected_segment_type_compact_{session_id}'
+            selected_type_sync_key = f'selected_segment_type_sync_{session_id}'
+            if (
+                selected_type_key not in st.session_state
+                or st.session_state.get(selected_type_sync_key) != int(selected_segment_index)
+            ):
+                st.session_state[selected_type_key] = str(active_segment.get('label') or 'autre')
+                st.session_state[selected_type_sync_key] = int(selected_segment_index)
+            type_cols = st.columns([2.2, 1.0])
+            type_cols[0].selectbox('Type', options=TEMPORAL_SEGMENT_LABELS, key=selected_type_key)
+            if type_cols[1].button('Appliquer', key=f'compact_apply_type_{session_id}', use_container_width=True):
+                if update_selected_temporal_segment(session_id, total_duration_s, repository, label=st.session_state.get(selected_type_key)):
+                    st.rerun()
+            metric_grid = st.columns(2)
+            metric_grid[0].markdown(build_metric_card_html('Debut', format_offset_label(active_segment.get('start_offset_s'))), unsafe_allow_html=True)
+            metric_grid[1].markdown(build_metric_card_html('Fin', format_offset_label(active_segment.get('end_offset_s'))), unsafe_allow_html=True)
+            metric_grid = st.columns(2)
+            metric_grid[0].markdown(build_metric_card_html('Duree', format_duration(active_segment.get('duration_s'))), unsafe_allow_html=True)
+            metric_grid[1].markdown(build_metric_card_html('FC moyenne', compute_segment_fc_mean(hr_frame, active_segment)), unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    with lower_cols[1]:
+        st.markdown("<div style='display:flex;flex-direction:column;gap:0.65rem;justify-content:center;height:100%;'>", unsafe_allow_html=True)
+        if st.button('Valider segmentation', key=f'validate_fc_segments_{session_id}', type='primary', use_container_width=True, disabled=not segments):
             if persist_temporal_segments(session_id, segments, total_duration_s, repository):
-                segments = st.session_state.get(temporal_segments_key(session_id), [])
-                st.session_state["activity_management_notice"] = {
-                    "level": "success",
-                    "message": f"Segmentation temporelle validee pour {session_id}.",
-                }
+                st.session_state['activity_management_notice'] = {'level': 'success', 'message': f'Segmentation temporelle validee pour {session_id}.'}
                 st.rerun()
-
         export_frame = repository.build_fc_phase_segments_export_frame(segments)
         export_csv = export_frame.to_csv(index=False) if not export_frame.empty else "segment_id,type,t_debut_s,t_fin_s,duree_s\n"
-        st.download_button(
-            "Exporter CSV",
-            data=export_csv,
-            file_name=f"{session_id}_segments_fc.csv",
-            mime="text/csv",
-            use_container_width=True,
-            key=f"export_fc_segments_{session_id}",
-        )
+        st.download_button('Exporter CSV', data=export_csv, file_name=f'{session_id}_segments_fc.csv', mime='text/csv', use_container_width=True, key=f'export_fc_segments_{session_id}')
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    render_section_label("Resume des phases")
     summary_frame = repository.summarize_fc_phase_segments(st.session_state.get(temporal_segments_key(session_id), []))
-    if summary_frame.empty:
-        st.info("Aucun segment temporel a resumer.")
-    else:
-        summary_frame = summary_frame.copy()
-        summary_frame["debut"] = summary_frame["debut_s"].apply(format_offset_label)
-        summary_frame["fin"] = summary_frame["fin_s"].apply(format_offset_label)
-        summary_frame["duree"] = summary_frame["duree_s"].apply(format_duration)
-        st.dataframe(summary_frame[["ordre", "phase", "debut", "fin", "duree", "origine"]], use_container_width=True, hide_index=True)
+    with st.expander(f'Resume des phases ({len(summary_frame) if not summary_frame.empty else 0} segments)', expanded=False):
+        if summary_frame.empty:
+            st.info('Aucun segment temporel a resumer.')
+        else:
+            summary_frame = summary_frame.copy()
+            summary_frame['segment_idx'] = summary_frame['ordre'].astype(int)
+            summary_frame['ordre_display'] = range(1, len(summary_frame) + 1)
+            summary_frame['debut'] = summary_frame['debut_s'].apply(format_offset_label)
+            summary_frame['fin'] = summary_frame['fin_s'].apply(format_offset_label)
+            summary_frame['duree'] = summary_frame['duree_s'].apply(format_duration)
+            active_segment_idx = int(selected_segment_index) if selected_segment_index is not None else None
+            for row in summary_frame.itertuples(index=False):
+                row_cols = st.columns([0.6, 1.8, 1.0, 1.0, 1.0])
+                tone = 'background:rgba(33,72,52,0.06);border-radius:10px;' if active_segment_idx == int(row.segment_idx) else ''
+                with row_cols[0]:
+                    if st.button(str(row.ordre_display), key=f'select_summary_segment_{session_id}_{row.segment_idx}', use_container_width=True):
+                        st.session_state[temporal_selected_segment_key(session_id)] = int(row.segment_idx)
+                        st.rerun()
+                with row_cols[1]:
+                    st.markdown(build_segment_chip_html(str(row.phase)), unsafe_allow_html=True)
+                row_cols[2].markdown(f"<div style='{tone}padding:0.4rem 0.6rem'>{row.debut}</div>", unsafe_allow_html=True)
+                row_cols[3].markdown(f"<div style='{tone}padding:0.4rem 0.6rem'>{row.fin}</div>", unsafe_allow_html=True)
+                row_cols[4].markdown(f"<div style='{tone}padding:0.4rem 0.6rem'>{row.duree}</div>", unsafe_allow_html=True)
+
+    st.caption('Clic gauche = selectionner segment - Actions sur le segment = popover ci-dessus - Glisser bords = redimensionner - Ctrl+Z = annuler')
 
 
 def initialize_form_state(session, repository: ProcessedSessionRepository) -> None:
@@ -971,6 +1055,7 @@ def initialize_form_state(session, repository: ProcessedSessionRepository) -> No
     st.session_state[temporal_move_anchor_key(session_id)] = "debut"
     st.session_state[temporal_last_graph_action_key(session_id)] = None
     st.session_state[temporal_component_event_key(session_id)] = 0
+    reset_temporal_history(session_id, normalized_segments)
 
     phase_items: list[dict[str, Any]] = []
     max_phase_counter = 0
@@ -1030,6 +1115,10 @@ def initialize_form_state(session, repository: ProcessedSessionRepository) -> No
             entry_rpe = entry.get("rpe")
             st.session_state[f"randori_rpe_{session_id}_{phase_uid}_{repetition_index}"] = str(entry_rpe) if entry_rpe not in (None, "", "NA") else "NA"
             st.session_state[f"randori_comment_{session_id}_{phase_uid}_{repetition_index}"] = str(entry.get("comment") or "")
+            entry_duration = entry.get("duration_min", block.get("randori_duration_min"))
+            entry_recovery = entry.get("recovery_min", block.get("rest_between_randoris_min"))
+            st.session_state[f"randori_duration_entry_{session_id}_{phase_uid}_{repetition_index}"] = float(entry_duration) if entry_duration not in (None, "", "NA") else 4.0
+            st.session_state[f"randori_recovery_entry_{session_id}_{phase_uid}_{repetition_index}"] = float(entry_recovery) if entry_recovery not in (None, "", "NA") else 0.0
 
 
 def append_phase(session_id: str, phase_label: str) -> None:
@@ -1087,23 +1176,34 @@ def build_phase_payload(session_id: str) -> tuple[list[dict[str, Any]], list[dic
             continue
         randori_count = to_optional_number(st.session_state.get(f"randori_count_{session_id}_{phase_uid}"), integer=True)
         randori_entries: list[dict[str, Any]] = []
+        duration_values: list[float] = []
+        recovery_values: list[float] = []
         if isinstance(randori_count, int) and randori_count > 0:
             for repetition_index in range(1, randori_count + 1):
+                duration_value = float(st.session_state.get(f"randori_duration_entry_{session_id}_{phase_uid}_{repetition_index}", 4.0))
+                recovery_value = float(st.session_state.get(f"randori_recovery_entry_{session_id}_{phase_uid}_{repetition_index}", 0.0))
+                duration_values.append(duration_value)
+                if repetition_index < randori_count and recovery_value > 0:
+                    recovery_values.append(recovery_value)
                 randori_entries.append(
                     {
                         "repetition_index": repetition_index,
                         "rpe": to_optional_int(st.session_state.get(f"randori_rpe_{session_id}_{phase_uid}_{repetition_index}")),
                         "comment": to_optional_text(st.session_state.get(f"randori_comment_{session_id}_{phase_uid}_{repetition_index}")),
+                        "duration_min": duration_value,
+                        "recovery_min": recovery_value if repetition_index < randori_count else None,
                     }
                 )
+        block_duration = round(sum(duration_values) / len(duration_values), 2) if duration_values else to_optional_number(st.session_state.get(f"randori_duration_{session_id}_{phase_uid}"), integer=False)
+        block_recovery = round(sum(recovery_values) / len(recovery_values), 2) if recovery_values else to_optional_number(st.session_state.get(f"randori_rest_{session_id}_{phase_uid}"), integer=False)
         randori_blocks.append(
             {
                 "phase_index": phase_index,
                 "phase_uid": phase_uid,
                 "randori_kind": st.session_state.get(f"randori_kind_{session_id}_{phase_uid}", default_randori_kind(phase_label)),
                 "randori_count": randori_count,
-                "randori_duration_min": to_optional_number(st.session_state.get(f"randori_duration_{session_id}_{phase_uid}"), integer=False),
-                "rest_between_randoris_min": to_optional_number(st.session_state.get(f"randori_rest_{session_id}_{phase_uid}"), integer=False),
+                "randori_duration_min": block_duration,
+                "rest_between_randoris_min": block_recovery,
                 "randori_entries": randori_entries,
             }
         )
@@ -1273,13 +1373,30 @@ def main() -> None:
     _, _, hr_frame = repository.load_session_data(selected_session_id)
 
     st.markdown('<div class="detail-card">', unsafe_allow_html=True)
-    render_section_label("Activite selectionnee")
-    st.subheader(session.annotation or session.session_id)
-    st.caption(f"Session ID : {session.session_id} | {session.date} | debut {session.heure_debut}")
-    render_status_pills(session)
-    render_session_summary(session, hr_frame, repository)
+    start_dt = repository.get_session_start(session)
+    end_dt = repository.get_session_end(session)
+    hr_valid = hr_frame.loc[hr_frame["bpm"].fillna(0) > 0].copy() if not hr_frame.empty and "bpm" in hr_frame.columns else pd.DataFrame()
+    fc_min = int(hr_valid["bpm"].min()) if not hr_valid.empty else session.bpm_min
+    fc_max = int(hr_valid["bpm"].max()) if not hr_valid.empty else session.bpm_max
+    title_cols = st.columns([3.2, 1.4])
+    with title_cols[0]:
+        st.markdown(f"<div style='font-size:22px;font-weight:700;color:#173427;'>{session.annotation or session.session_id}</div>", unsafe_allow_html=True)
+        subtitle = f"{session.date} - {session.session_id} - {terminal_category_label(session.activity_label)}"
+        st.markdown(f"<div style='font-size:0.86rem;color:#667066;margin-top:0.18rem;'>{subtitle}</div>", unsafe_allow_html=True)
+    with title_cols[1]:
+        badges = [
+            build_badge_html('Annotee' if session.is_activity_annotated else 'Non annotee', tone='success' if session.is_activity_annotated else 'warn'),
+            build_badge_html('Active' if not session.is_archived else 'Archivee', tone='default' if not session.is_archived else 'muted'),
+        ]
+        st.markdown(f"<div style='display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;'>{''.join(badges)}</div>", unsafe_allow_html=True)
+    metric_cols = st.columns(6)
+    metric_cols[0].markdown(build_metric_card_html('Duree', format_duration(session.duree_s)), unsafe_allow_html=True)
+    metric_cols[1].markdown(build_metric_card_html('FC min', str(fc_min), 'bpm'), unsafe_allow_html=True)
+    metric_cols[2].markdown(build_metric_card_html('FC max', str(fc_max), 'bpm'), unsafe_allow_html=True)
+    metric_cols[3].markdown(build_metric_card_html('Debut', format_datetime_label(start_dt)), unsafe_allow_html=True)
+    metric_cols[4].markdown(build_metric_card_html('Fin', format_datetime_label(end_dt)), unsafe_allow_html=True)
+    metric_cols[5].markdown(build_metric_card_html('RPE seance', str(session.session_rpe) if getattr(session, 'session_rpe', None) is not None else '-'), unsafe_allow_html=True)
 
-    render_section_label("Edition")
     session_id = session.session_id
     annotation_key = f"annotation_input_{session_id}"
     family_key = f"activity_family_{session_id}"
@@ -1287,153 +1404,180 @@ def main() -> None:
     notes_key = f"activity_notes_{session_id}"
     session_rpe_key = f"session_rpe_{session_id}"
     judo_type_key = f"judo_session_type_{session_id}"
+    selected_family = str(st.session_state.get(family_key) or session.activity_family or '')
+    current_label = str(st.session_state.get(label_key) or session.activity_label or '')
 
-    form_col1, form_col2 = st.columns(2)
-    with form_col1:
-        st.text_input("Nom de l'activite", key=annotation_key)
-        st.selectbox("Famille d'activite", options=["", "judo", "prepa", "autres"], key=family_key)
+    detail_toggle_key = f'detail_flow_toggle_{session_id}'
+    if detail_toggle_key not in st.session_state:
+        st.session_state[detail_toggle_key] = bool(st.session_state.get(f'phase_items_{session_id}', []))
 
-    selected_family = st.session_state.get(family_key)
-    current_label = st.session_state.get(label_key, "")
-    with form_col2:
-        if selected_family == "judo":
-            st.selectbox("Type de seance judo", options=["technique", "randoris"], key=judo_type_key)
-            selected_judo_type = st.session_state.get(judo_type_key)
-            if selected_judo_type == "technique":
-                st.session_state[label_key] = "judo > technique"
-                st.info("Activite attribuee automatiquement : judo > technique")
-            else:
-                randori_options = [
-                    option for option in activity_options
-                    if option.startswith("judo > randoris >")
-                ]
-                if current_label not in randori_options:
-                    st.session_state[label_key] = randori_options[0] if randori_options else ""
-                st.selectbox("Categorie precise", options=randori_options, key=label_key)
-        elif selected_family == "prepa":
-            st.session_state[judo_type_key] = "technique"
-            prepa_options = [
-                option for option in activity_options
-                if option.startswith("prepa >")
-            ]
-            if current_label not in prepa_options:
-                st.session_state[label_key] = prepa_options[0] if prepa_options else ""
-            st.selectbox("Activite precise", options=prepa_options, key=label_key)
-        elif selected_family == "autres":
-            st.session_state[judo_type_key] = "technique"
-            st.session_state[label_key] = "autres"
-            st.info("Activite attribuee automatiquement : autres")
-        else:
-            st.session_state[judo_type_key] = "technique"
-            st.session_state[label_key] = ""
-
-    notes_cols = st.columns([2.1, 1.0])
-    with notes_cols[0]:
-        st.text_area("Notes generales", key=notes_key, height=100)
-    with notes_cols[1]:
-        st.selectbox("RPE global de seance", options=RPE_OPTIONS, key=session_rpe_key)
-
-    if st.session_state.get(family_key) == "judo" and st.session_state.get(judo_type_key) == "randoris":
-        render_section_label("Phases judo")
-        phase_items = st.session_state.get(f"phase_items_{session_id}", [])
-        add_col1, add_col2 = st.columns([3, 1])
-        new_phase_key = f"new_phase_{session_id}"
-        if new_phase_key not in st.session_state:
-            st.session_state[new_phase_key] = judo_phase_options[0] if judo_phase_options else "echauffement"
-        with add_col1:
-            st.selectbox("Ajouter une phase", options=judo_phase_options or ["echauffement"], key=new_phase_key)
-        with add_col2:
-            if st.button("Ajouter", key=f"add_phase_button_{session_id}", use_container_width=True):
-                append_phase(session_id, st.session_state.get(new_phase_key, "echauffement"))
-                st.rerun()
-
-        if not phase_items:
-            st.info("Ajoute les phases de la seance pour decrire l'ordre : echauffement, technique, randoris TW, technique, etc.")
-
-        phase_rows: list[tuple[int, str, str]] = []
-        for index, phase_item in enumerate(phase_items):
-            phase_uid = phase_item["phase_uid"]
-            phase_label_key = f"phase_label_{session_id}_{phase_uid}"
-            row_cols = st.columns([0.8, 3.4, 0.8, 0.8, 0.9])
-            row_cols[0].markdown(f"**{index + 1}.**")
-            row_cols[1].selectbox(
-                "Phase",
-                options=judo_phase_options or ["echauffement"],
-                key=phase_label_key,
-                label_visibility="collapsed",
-            )
-            if row_cols[2].button("Monter", key=f"move_up_{session_id}_{phase_uid}", use_container_width=True):
-                move_phase(session_id, phase_uid, -1)
-                st.rerun()
-            if row_cols[3].button("Descendre", key=f"move_down_{session_id}_{phase_uid}", use_container_width=True):
-                move_phase(session_id, phase_uid, 1)
-                st.rerun()
-            if row_cols[4].button("Retirer", key=f"remove_phase_{session_id}_{phase_uid}", use_container_width=True):
-                remove_phase(session_id, phase_uid)
-                st.rerun()
-            phase_rows.append((index, phase_uid, st.session_state.get(phase_label_key, phase_item["phase_label"])))
-
-        current_labels = current_phase_labels(session_id)
-        persisted_labels = saved_phase_labels(session)
-        has_randori_phase = any(phase_is_randori(label) for label in current_labels)
-        randori_details_unlocked = bool(persisted_labels) and current_labels == persisted_labels
-
-        if has_randori_phase and not randori_details_unlocked:
-            st.info("Commence par definir toute la seance puis clique sur Enregistrer. Les details des phases de randoris apparaitront ensuite seulement.")
-        elif has_randori_phase:
-            render_section_label("Details des phases randoris")
-            for index, phase_uid, current_phase_label in phase_rows:
-                if not phase_is_randori(current_phase_label):
-                    continue
-
-                render_section_label(f"Details randoris phase {index + 1}")
-                kind_key = f"randori_kind_{session_id}_{phase_uid}"
-                count_key = f"randori_count_{session_id}_{phase_uid}"
-                duration_key = f"randori_duration_{session_id}_{phase_uid}"
-                rest_key = f"randori_rest_{session_id}_{phase_uid}"
-                if kind_key not in st.session_state:
-                    st.session_state[kind_key] = default_randori_kind(current_phase_label)
-                detail_cols = st.columns(4)
-                detail_cols[0].selectbox("Categorie randori", options=RANDORI_KIND_OPTIONS, key=kind_key)
-                detail_cols[1].selectbox("Nombre de randoris", options=RANDORI_COUNT_OPTIONS, key=count_key)
-                duration_options = ["NA"] + RANDORI_DURATION_OPTIONS if st.session_state.get(kind_key) == "libres" else RANDORI_DURATION_OPTIONS
-                if st.session_state.get(duration_key) not in duration_options:
-                    st.session_state[duration_key] = duration_options[0]
-                detail_cols[2].selectbox("Duree d'un randori (min)", options=duration_options, key=duration_key)
-                detail_cols[3].selectbox("Repos entre randoris (min)", options=RANDORI_REST_OPTIONS, key=rest_key)
-
-                selected_count = st.session_state.get(count_key, "NA")
-                try:
-                    repetition_count = int(selected_count) if selected_count not in (None, "", "NA") else 0
-                except (TypeError, ValueError):
-                    repetition_count = 0
-                if repetition_count > 0:
-                    st.caption("Renseigne le RPE et un petit commentaire pour chaque randori de cette phase.")
-                    for repetition_index in range(1, repetition_count + 1):
-                        rpe_key = f"randori_rpe_{session_id}_{phase_uid}_{repetition_index}"
-                        comment_key = f"randori_comment_{session_id}_{phase_uid}_{repetition_index}"
-                        if rpe_key not in st.session_state:
-                            st.session_state[rpe_key] = "NA"
-                        if comment_key not in st.session_state:
-                            st.session_state[comment_key] = ""
-                        repetition_cols = st.columns([0.75, 1.0, 3.25])
-                        repetition_cols[0].markdown(f"**{repetition_index}.**")
-                        repetition_cols[1].selectbox(
-                            "RPE",
-                            options=RPE_OPTIONS,
-                            key=rpe_key,
-                            label_visibility="collapsed",
-                        )
-                        repetition_cols[2].text_input(
-                            "Commentaire",
-                            key=comment_key,
-                            label_visibility="collapsed",
-                            placeholder="Commentaire rapide sur ce randori",
-                        )
+    main_cols = st.columns([1, 1])
+    with main_cols[0]:
+        st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1rem;font-weight:650;color:#173427;margin-bottom:0.9rem;'>Informations generales</div>", unsafe_allow_html=True)
+        st.text_input('Nom de l activite', key=annotation_key)
+        general_cols = st.columns(2)
+        with general_cols[0]:
+            st.selectbox('Famille d activite', options=['', 'judo', 'prepa', 'autres'], key=family_key)
+        with general_cols[1]:
+            if selected_family == 'judo':
+                st.selectbox('Type de seance', options=['technique', 'randoris'], key=judo_type_key)
+                selected_judo_type = st.session_state.get(judo_type_key)
+                if selected_judo_type == 'technique':
+                    st.session_state[label_key] = 'judo > technique'
                 else:
-                    st.info("Renseigne d'abord le nombre de randoris pour annoter le RPE et les commentaires repetition par repetition.")
+                    randori_options = [option for option in activity_options if option.startswith('judo > randoris >')]
+                    if current_label not in randori_options:
+                        st.session_state[label_key] = randori_options[0] if randori_options else ''
+                    st.selectbox('Sous-type', options=randori_options, key=label_key)
+            elif selected_family == 'prepa':
+                st.session_state[judo_type_key] = 'technique'
+                prepa_options = [option for option in activity_options if option.startswith('prepa >')]
+                if current_label not in prepa_options:
+                    st.session_state[label_key] = prepa_options[0] if prepa_options else ''
+                st.selectbox('Type de seance', options=prepa_options, key=label_key)
+            elif selected_family == 'autres':
+                st.session_state[judo_type_key] = 'technique'
+                st.session_state[label_key] = 'autres'
+                st.text_input('Categorie', value='autres', disabled=True)
+            else:
+                st.session_state[judo_type_key] = 'technique'
+                st.session_state[label_key] = ''
+                st.text_input('Type de seance', value='-', disabled=True)
+        st.text_area('Notes generales', key=notes_key, height=110)
+        general_footer_cols = st.columns(2)
+        with general_footer_cols[0]:
+            st.selectbox('RPE global', options=RPE_OPTIONS, key=session_rpe_key)
+        with general_footer_cols[1]:
+            st.text_input('Categorie', value=terminal_category_label(st.session_state.get(label_key)), disabled=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    action_cols = st.columns(3)
+    phase_items = st.session_state.get(f'phase_items_{session_id}', [])
+    phase_rows: list[tuple[int, str, str]] = []
+    has_randori_phase = False
+    randori_details_unlocked = False
+    with main_cols[1]:
+        st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1rem;font-weight:650;color:#173427;margin-bottom:0.9rem;'>Deroule de la seance</div>", unsafe_allow_html=True)
+        if st.session_state.get(family_key) != 'judo' or st.session_state.get(judo_type_key) != 'randoris':
+            st.info('Aucun deroule detaille pour cette seance.')
+        elif not phase_items and not st.session_state.get(detail_toggle_key):
+            st.info('Aucun deroule detaille.')
+            if st.button('Ajouter un deroule', key=f'activate_flow_{session_id}'):
+                st.session_state[detail_toggle_key] = True
+                st.rerun()
+        else:
+            st.toggle('Detailler le deroule', key=detail_toggle_key)
+            add_phase_cols = st.columns([3, 1])
+            new_phase_key = f'new_phase_{session_id}'
+            if new_phase_key not in st.session_state:
+                st.session_state[new_phase_key] = judo_phase_options[0] if judo_phase_options else 'echauffement'
+            add_phase_cols[0].selectbox('Ajouter une phase', options=judo_phase_options or ['echauffement'], key=new_phase_key)
+            if add_phase_cols[1].button('+ Phase', key=f'add_phase_button_{session_id}', use_container_width=True):
+                append_phase(session_id, st.session_state.get(new_phase_key, 'echauffement'))
+                st.session_state[detail_toggle_key] = True
+                st.rerun()
+
+            current_labels = current_phase_labels(session_id)
+            persisted_labels = saved_phase_labels(session)
+            has_randori_phase = any(phase_is_randori(label) for label in current_labels)
+            randori_details_unlocked = bool(persisted_labels) and current_labels == persisted_labels
+            if phase_items:
+                pills_markup = ''.join(build_segment_chip_html(st.session_state.get(f'phase_label_{session_id}_{item["phase_uid"]}', item['phase_label'])) for item in phase_items)
+                st.markdown(f"<div style='display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;'>{pills_markup}</div>", unsafe_allow_html=True)
+                st.caption('Cliquer pour modifier - X pour retirer')
+            for index, phase_item in enumerate(phase_items):
+                phase_uid = phase_item['phase_uid']
+                phase_label_key = f'phase_label_{session_id}_{phase_uid}'
+                row_cols = st.columns([2.6, 0.7, 0.7, 0.7])
+                row_cols[0].selectbox('Phase', options=judo_phase_options or ['echauffement'], key=phase_label_key, label_visibility='collapsed')
+                if row_cols[1].button('Up', key=f'move_up_{session_id}_{phase_uid}', use_container_width=True):
+                    move_phase(session_id, phase_uid, -1)
+                    st.rerun()
+                if row_cols[2].button('Down', key=f'move_down_{session_id}_{phase_uid}', use_container_width=True):
+                    move_phase(session_id, phase_uid, 1)
+                    st.rerun()
+                if row_cols[3].button('X', key=f'remove_phase_{session_id}_{phase_uid}', use_container_width=True):
+                    remove_phase(session_id, phase_uid)
+                    st.rerun()
+                phase_rows.append((index, phase_uid, st.session_state.get(phase_label_key, phase_item['phase_label'])))
+
+            if has_randori_phase and not randori_details_unlocked:
+                st.info('Commence par enregistrer la structure de la seance pour debloquer les precisions randoris.')
+            elif has_randori_phase:
+                st.markdown("<div style='margin-top:0.8rem;font-size:0.9rem;font-weight:600;color:#173427;'>Details phase randoris</div>", unsafe_allow_html=True)
+                for index, phase_uid, current_phase_label in phase_rows:
+                    if not phase_is_randori(current_phase_label):
+                        continue
+                    detail_cols = st.columns(2)
+                    kind_key = f'randori_kind_{session_id}_{phase_uid}'
+                    count_key = f'randori_count_{session_id}_{phase_uid}'
+                    if kind_key not in st.session_state:
+                        st.session_state[kind_key] = default_randori_kind(current_phase_label)
+                    detail_cols[0].selectbox(f'Categorie phase {index + 1}', options=RANDORI_KIND_OPTIONS, key=kind_key)
+                    detail_cols[1].selectbox(f'Nombre phase {index + 1}', options=RANDORI_COUNT_OPTIONS, key=count_key)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if has_randori_phase and randori_details_unlocked:
+        randori_items: list[dict[str, Any]] = []
+        for index, phase_uid, current_phase_label in phase_rows:
+            if not phase_is_randori(current_phase_label):
+                continue
+            selected_count = st.session_state.get(f'randori_count_{session_id}_{phase_uid}', 'NA')
+            try:
+                repetition_count = int(selected_count) if selected_count not in (None, '', 'NA') else 0
+            except (TypeError, ValueError):
+                repetition_count = 0
+            for repetition_index in range(1, repetition_count + 1):
+                rpe_key = f'randori_rpe_{session_id}_{phase_uid}_{repetition_index}'
+                comment_key = f'randori_comment_{session_id}_{phase_uid}_{repetition_index}'
+                duration_key = f'randori_duration_entry_{session_id}_{phase_uid}_{repetition_index}'
+                recovery_key = f'randori_recovery_entry_{session_id}_{phase_uid}_{repetition_index}'
+                if rpe_key not in st.session_state:
+                    st.session_state[rpe_key] = 'NA'
+                if comment_key not in st.session_state:
+                    st.session_state[comment_key] = ''
+                if duration_key not in st.session_state:
+                    st.session_state[duration_key] = 4.0
+                if recovery_key not in st.session_state:
+                    st.session_state[recovery_key] = 0.0
+                randori_items.append({'phase_uid': phase_uid, 'phase_label': current_phase_label, 'repetition_index': repetition_index})
+
+        if randori_items:
+            rated_values = [int(st.session_state.get(f"randori_rpe_{session_id}_{item['phase_uid']}_{item['repetition_index']}")) for item in randori_items if st.session_state.get(f"randori_rpe_{session_id}_{item['phase_uid']}_{item['repetition_index']}") not in (None, '', 'NA')]
+            mean_rpe = round(sum(rated_values) / len(rated_values), 1) if rated_values else None
+            st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
+            header_cols = st.columns([2, 1])
+            header_cols[0].markdown("<div style='font-size:1rem;font-weight:650;color:#173427;'>Description randoris</div>", unsafe_allow_html=True)
+            header_cols[1].markdown(f"<div style='text-align:right;color:#5b675e;font-size:0.9rem;margin-top:0.2rem;'>{len(randori_items)} randoris - RPE moyen : {mean_rpe if mean_rpe is not None else '-'}</div>", unsafe_allow_html=True)
+            for row_items in chunked(randori_items, 8):
+                row_cols = st.columns(len(row_items))
+                for col, item in zip(row_cols, row_items):
+                    phase_uid = item['phase_uid']
+                    repetition_index = item['repetition_index']
+                    rpe_key = f'randori_rpe_{session_id}_{phase_uid}_{repetition_index}'
+                    comment_key = f'randori_comment_{session_id}_{phase_uid}_{repetition_index}'
+                    duration_key = f'randori_duration_entry_{session_id}_{phase_uid}_{repetition_index}'
+                    recovery_key = f'randori_recovery_entry_{session_id}_{phase_uid}_{repetition_index}'
+                    raw_rpe = st.session_state.get(rpe_key, 'NA')
+                    numeric_rpe = int(raw_rpe) if raw_rpe not in (None, '', 'NA') else 0
+                    if numeric_rpe <= 5:
+                        bar_color = '#1D9E75'
+                    elif numeric_rpe <= 7:
+                        bar_color = '#BA7517'
+                    else:
+                        bar_color = '#D85A30'
+                    bar_height = max(12, numeric_rpe * 10)
+                    with col:
+                        st.markdown(f"<div style='font-weight:700;margin-bottom:0.35rem;'>R{len(randori_items[:randori_items.index(item)+1])}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='height:112px;display:flex;align-items:flex-end;justify-content:center;background:#f7f7f5;border-radius:10px;margin-bottom:0.6rem;'><div style='width:42px;height:{bar_height}%;min-height:24px;background:{bar_color};border-radius:10px 10px 6px 6px;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;'>{numeric_rpe if numeric_rpe else '-'}</div></div>", unsafe_allow_html=True)
+                        st.selectbox('RPE', options=RPE_OPTIONS, key=rpe_key, label_visibility='collapsed')
+                        st.number_input('Duree (min)', min_value=0.0, step=0.5, key=duration_key)
+                        st.number_input('Recup (min)', min_value=0.0, step=0.5, key=recovery_key)
+                        st.text_input('Commentaire', key=comment_key, label_visibility='collapsed', placeholder='Commentaire rapide')
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    action_cols = st.columns([1, 1, 2])
     if action_cols[0].button("Enregistrer", type="primary", use_container_width=True):
         payload: dict[str, Any] = {
             "annotation": st.session_state.get(annotation_key),
@@ -1475,7 +1619,24 @@ def main() -> None:
             st.session_state["activity_form_session_id"] = None
             st.rerun()
 
-    action_cols[2].metric("Statut annotation", "Oui" if session.is_activity_annotated else "Non")
+    current_segments = st.session_state.get(temporal_segments_key(session_id), [])
+    segmentation_valid = (
+        st.session_state.get(family_key) == 'judo'
+        and st.session_state.get(judo_type_key) == 'randoris'
+        and repository.validate_fc_phase_segments(current_segments, float(session.duree_s or 0.0))
+        and bool(current_segments)
+    )
+    if st.session_state.get(family_key) == 'judo' and st.session_state.get(judo_type_key) == 'randoris':
+        segmentation_badge = build_badge_html(
+            'Segmentation : validee' if segmentation_valid else 'Segmentation : non segmentee',
+            tone='success' if segmentation_valid else 'muted',
+        )
+    else:
+        segmentation_badge = build_badge_html('Segmentation : non applicable', tone='muted')
+    action_cols[2].markdown(
+        f"<div style='display:flex;justify-content:flex-end;align-items:center;height:100%;'>{segmentation_badge}</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
     if session.activity_family == "judo" and session.judo_session_type == "randoris":
@@ -1489,6 +1650,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
