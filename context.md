@@ -1,4 +1,4 @@
-# Contexte de session
+﻿# Contexte de session
 
 ## A lire en premier
 
@@ -12,7 +12,7 @@ Rappel :
 - `changelog.md` sert d'historique detaille
 - en fin de session, `context.md` doit etre mis a jour
 
-Derniere mise a jour : 2026-04-05
+Derniere mise a jour : 2026-04-06
 
 ## But du document
 
@@ -86,7 +86,7 @@ Le CLI appelle `polar_app.cli.run_cli()` et peut importer ou afficher les seance
 - Les zones denses d'artefacts sont marquees separement.
 - Les coupures de plus de 60 secondes ne sont pas interpolees.
 - Le recalage temporel du clean reutilise les timestamps Polar d'origine quand ils existent.
-- Les segments trop degradés sont exclus selon des seuils dependants de leur duree.
+- Les segments trop degradÃ©s sont exclus selon des seuils dependants de leur duree.
 - Les exports clean ecrivent au minimum :
   - `rr_clean.parquet`
   - `fc_clean.parquet`
@@ -94,8 +94,10 @@ Le CLI appelle `polar_app.cli.run_cli()` et peut importer ou afficher les seance
 
 ### Analyse RR
 
-- La page `Analyse RR` sait afficher les stats de qualite et recompiler les exports clean manquants ou obsoletes.
+- La page Analyse RR sait afficher les stats de qualite et recompiler les exports clean manquants ou obsoletes.
 - La detection d'obsolescence s'appuie sur la version d'algo de nettoyage.
+- La selection s'appuie maintenant sur ctivity_label, puis permet de choisir plusieurs seances d'une meme activite pour afficher leurs graphes RR en parallele.
+- Les graphes peuvent montrer plusieurs seances en meme temps, tandis que les indicateurs et tableaux detailles restent pilotes par une seance active.
 
 ### Gestion des activites
 
@@ -146,7 +148,8 @@ Au debut d'une nouvelle session :
 
 ### Objectif courant
 
-- A renseigner a la fin de la session en cours.
+- Etendre Analyse RR pour filtrer par activite et visualiser plusieurs seances d'une meme activite dans des graphes separes.
+- Etat : fonctionnalite implementee dans `pages/4_Analyse_RR.py`.
 
 ### Dernieres decisions actives
 
@@ -156,9 +159,11 @@ Au debut d'une nouvelle session :
 
 ### Prochaine reprise conseillee
 
-- Relire `changelog.md` puis reprendre a partir de la derniere demande utilisateur non terminee.
+- Verifier visuellement dans Streamlit le comportement de la multi-selection sur `Analyse RR`, notamment le changement d'activite, la seance active et les cas sans `activity_label`.
 
 ### Blocages / points a surveiller
 
 - Aucun blocage explicite documente dans ce fichier pour l'instant.
 - Le prochain travail devra preciser s'il concerne plutot le pipeline RR ou l'UX des pages activite.
+
+

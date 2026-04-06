@@ -1,6 +1,15 @@
-# Changelog
+﻿# Changelog
 
 Ce fichier suit les modifications apportees au projet suite a tes demandes.
+
+## 2026-04-06
+
+### Page `Analyse RR`
+
+- Ajout d'un filtre par `activity_label` dans `pages/4_Analyse_RR.py`, avec fallback `Activite non annotee` pour les seances sans metadonnees d'activite.
+- Remplacement de la selection mono-seance par une selection multi-seances limitee a l'activite choisie, avec conservation d'une `seance active` pour les metriques et tableaux detailles.
+- Refonte du rendu des graphes RR pour afficher plusieurs seances d'une meme activite dans des blocs separes, tout en conservant pour chaque seance les deux vues existantes (`RR clean annote` et `RR clean sans annotation`).
+- Factorisation de la preparation d'analyse par seance pour centraliser le chargement, le recalcul analytique, les tables et les graphes sans modifier la pipeline RR ni la version d'algo 3.1.
 
 ## 2026-03-30
 
@@ -156,3 +165,6 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 - Refonte UX de Gestion activites : nouveau header compact avec badges et 6 metriques, formulaire Description de seance en deux colonnes, bloc Description randoris en cartes horizontales, et badge de statut de segmentation en bas de page.
 - Refonte UX de la segmentation temporelle dans Gestion activites : barre haute avec segment actif + annuler/retablir, popover d'actions sur le segment, panneau Segment selectionne compacte, et resume des phases replie par defaut.
 - Correction de l'etat UI de Gestion activites : synchronisation du type du segment actif lors des changements de selection, numerotation stable du resume des phases, et reintroduction explicite des variables de contexte de formulaire pour eviter les erreurs runtime dans le nouveau layout.
+
+
+

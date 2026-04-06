@@ -1,0 +1,22 @@
+=== ACTIVITE 001 ===
+Debut         : 2026-04-06 10:17:26
+Fin           : 2026-04-06 10:55:58
+Duree totale  : 38 min 32 s
+
+Segments fusionnes : 4
+  Segment 0 : 20260406_101711 | debut 10:17:26 | fin 10:48:16 | duree 30 min 49 s
+  Segment 1 : 20260406_104846 | debut 10:49:06 | fin 10:49:37 | duree 0 min 31 s
+  Segment 2 : 20260406_104952 | debut 10:50:12 | fin 10:53:37 | duree 3 min 25 s
+  Segment 3 : 20260406_105408 | debut 10:54:27 | fin 10:55:58 | duree 1 min 31 s
+
+Deconnexions fusionnees : 3
+  Gap 20260406_101711 -> 20260406_104846 | duree 50s | statut user_confirmed_merge
+  Gap 20260406_104846 -> 20260406_104952 | duree 35s | statut user_confirmed_merge
+  Gap 20260406_104952 -> 20260406_105408 | duree 50s | statut user_confirmed_merge
+
+Doublons detectes : 0
+
+Pipeline RR :
+  GAP : 334 (6.8 %)
+  OK : 4480 (91.9 %)
+  POST_RECONNECT_LONG : 62 (1.3 %)
