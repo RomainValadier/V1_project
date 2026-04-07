@@ -4,6 +4,13 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
 ## 2026-04-06
 
+### Page `Bilan Qualite RR`
+
+- Creation de la nouvelle page `pages/7_Bilan_Qualite.py` pour produire un tableau de bord global de qualite du signal RR sur l'ensemble des seances non archivees, en lecture seule, a partir de `session_meta.json`, `rr_clean.parquet` et `clean_meta.json`.
+- Ajout d'un chargement cache par signatures de fichiers, de filtres globaux (`Toutes`, `Randoris`, `Technique`, `Prepa`), de KPI agreges, de graphiques comparatifs par seance, d'un tableau recapitulatif exportable en CSV et d'une visualisation multi-seances des courbes `RR clean`.
+- Prise en charge des cas de robustesse demandes pour cette page : seances sans `activity_label`, exports clean manquants ou illisibles, et compatibilite avec les colonnes observees dans les exports clean actuels (`display_rr_ms`, `t_offset_clean_ms`, `cleaning_algo_version`) avec fallback vers le schema cible documente.
+- Ajustement visuel des cartes KPI pour renforcer le contraste des fonds et mieux faire ressortir les indicateurs sans introduire de CSS lourd hors de la page.
+
 ### Page `Analyse RR`
 
 - Ajout d'un filtre par `activity_label` dans `pages/4_Analyse_RR.py`, avec fallback `Activite non annotee` pour les seances sans metadonnees d'activite.
@@ -168,3 +175,20 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
 
 
+
+
+
+
+## 2026-04-07
+
+### Page `Bilan Qualite RR`
+
+- Renforcement du contraste des cartes KPI de `pages/7_Bilan_Qualite.py` avec fonds plus lisibles et texte eclairci pour les libelles, valeurs et sous-textes.
+- Remplacement du graphique `% artefacts par seance` par un lollipop chart a echelle Y resserree, avec reperes visuels a `5 %` et `10 %` pour mieux lire les faibles taux d'artefacts.
+- Passage des graphes `RR clean` a Plotly pour activer le zoom, le pan, le scroll zoom et la selection visuelle de points corriges dans l'interface.
+
+- Correctif de rendu sur les graphiques `% FC exploitable` et `% RMSSD exploitable` de `pages/7_Bilan_Qualite.py` : echelle de couleurs Altair explicitee et largeur de barres fixee pour restaurer la visibilite des barres.
+- Correctif Altair des graphiques de comparaison : remplacement du champ couleur hexadécimal par un niveau de qualite (`good`, `warn`, `bad`) pour stabiliser l'affichage des barres `% FC exploitable` et `% RMSSD exploitable`, et inversion explicite de la tige du lollipop `% artefacts par seance` pour un rendu visuel du bas vers le haut.
+- Retour des trois graphiques comparatifs sous forme de diagrammes en batons, avec ajout d'une ligne de moyenne et d'un axe Y dynamique borne a `min - 5` / `max + 5` puis recadre dans `[0, 100]`.
+- Correction de la cause racine du non-affichage des barres Altair sur les graphiques comparatifs : avec un axe Y tronque, les barres partaient encore de `0` et se retrouvaient hors domaine ; elles demarrent maintenant explicitement a la borne basse visible du graphique.
+- Amelioration visuelle des graphiques comparatifs : couleur des textes de legende renforcee et affichage de la moyenne dans une legende dediee plus saillante au-dessus de chaque graphique.

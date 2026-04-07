@@ -153,24 +153,24 @@
   "activity_annotated_at": "2026-04-01T16:56:39.417006",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-01T16:59:40.540462",
+  "updated_at": "2026-04-07T10:13:44.842847",
   "fc_phase_segments": [
     {
       "segment_index": 0,
       "label": "echauffement",
       "start_offset_s": 0.0,
-      "end_offset_s": 3380.143,
-      "duration_s": 3380.143,
+      "end_offset_s": 3706.262,
+      "duration_s": 3706.262,
       "source": "manual",
       "phase_uid": null,
       "locked": false
     },
     {
       "segment_index": 1,
-      "label": "randori",
-      "start_offset_s": 3380.143,
-      "end_offset_s": 3572.008,
-      "duration_s": 191.865,
+      "label": "recuperation",
+      "start_offset_s": 3706.262,
+      "end_offset_s": 3908.303,
+      "duration_s": 202.041,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -178,9 +178,9 @@
     {
       "segment_index": 2,
       "label": "randori",
-      "start_offset_s": 3572.008,
-      "end_offset_s": 3912.789,
-      "duration_s": 340.781,
+      "start_offset_s": 3908.303,
+      "end_offset_s": 4069.521,
+      "duration_s": 161.218,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -188,9 +188,9 @@
     {
       "segment_index": 3,
       "label": "recuperation",
-      "start_offset_s": 3912.789,
-      "end_offset_s": 4036.71,
-      "duration_s": 123.921,
+      "start_offset_s": 4069.521,
+      "end_offset_s": 4168.732,
+      "duration_s": 99.211,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -198,9 +198,9 @@
     {
       "segment_index": 4,
       "label": "randori",
-      "start_offset_s": 4036.71,
-      "end_offset_s": 4179.218,
-      "duration_s": 142.508,
+      "start_offset_s": 4168.732,
+      "end_offset_s": 4236.559,
+      "duration_s": 67.827,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -208,9 +208,9 @@
     {
       "segment_index": 5,
       "label": "recuperation",
-      "start_offset_s": 4179.218,
-      "end_offset_s": 4365.099,
-      "duration_s": 185.881,
+      "start_offset_s": 4236.559,
+      "end_offset_s": 4315.272,
+      "duration_s": 78.713,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -218,9 +218,9 @@
     {
       "segment_index": 6,
       "label": "randori",
-      "start_offset_s": 4365.099,
-      "end_offset_s": 4532.392,
-      "duration_s": 167.293,
+      "start_offset_s": 4315.272,
+      "end_offset_s": 4608.982,
+      "duration_s": 293.71,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -228,9 +228,9 @@
     {
       "segment_index": 7,
       "label": "recuperation",
-      "start_offset_s": 4532.392,
-      "end_offset_s": 4767.841,
-      "duration_s": 235.449,
+      "start_offset_s": 4608.982,
+      "end_offset_s": 4757.799,
+      "duration_s": 148.817,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -238,9 +238,9 @@
     {
       "segment_index": 8,
       "label": "randori",
-      "start_offset_s": 4767.841,
-      "end_offset_s": 4916.545,
-      "duration_s": 148.705,
+      "start_offset_s": 4757.799,
+      "end_offset_s": 4850.809,
+      "duration_s": 93.01,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -248,9 +248,9 @@
     {
       "segment_index": 9,
       "label": "recuperation",
-      "start_offset_s": 4916.545,
-      "end_offset_s": 5034.27,
-      "duration_s": 117.724,
+      "start_offset_s": 4850.809,
+      "end_offset_s": 4919.017,
+      "duration_s": 68.208,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -258,9 +258,9 @@
     {
       "segment_index": 10,
       "label": "randori",
-      "start_offset_s": 5034.27,
-      "end_offset_s": 5251.13,
-      "duration_s": 216.861,
+      "start_offset_s": 4919.017,
+      "end_offset_s": 4989.658,
+      "duration_s": 70.641,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -268,9 +268,9 @@
     {
       "segment_index": 11,
       "label": "recuperation",
-      "start_offset_s": 5251.13,
+      "start_offset_s": 4989.658,
       "end_offset_s": 5319.287,
-      "duration_s": 68.156,
+      "duration_s": 329.629,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -349,8 +349,18 @@
       "segment_index": 19,
       "label": "technique",
       "start_offset_s": 7035.585,
+      "end_offset_s": 7925.517,
+      "duration_s": 889.932,
+      "source": "manual",
+      "phase_uid": null,
+      "locked": false
+    },
+    {
+      "segment_index": 20,
+      "label": "retour_calme",
+      "start_offset_s": 7925.517,
       "end_offset_s": 8156.846,
-      "duration_s": 1121.261,
+      "duration_s": 231.329,
       "source": "manual",
       "phase_uid": null,
       "locked": false
