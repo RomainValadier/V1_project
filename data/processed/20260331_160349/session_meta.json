@@ -95,7 +95,7 @@
     }
   ],
   "activity_family": "judo",
-  "activity_label": "judo > randoris > TW",
+  "activity_label": "judo > randoris > randori_tw",
   "activity_notes": "seance séelctionné avec utchikomi",
   "judo_session_type": "randoris",
   "judo_phases": [
@@ -109,15 +109,15 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "phase_label": "randoris TW",
-      "phase_category": "randoris",
+      "phase_label": "randori_tw",
+      "phase_category": "randori_tw",
       "needs_randori_details": true
     },
     {
       "phase_index": 2,
       "phase_uid": "phase_3",
-      "phase_label": "autres",
-      "phase_category": "autres",
+      "phase_label": "technique",
+      "phase_category": "technique",
       "needs_randori_details": false
     }
   ],
@@ -125,7 +125,7 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "randori_kind": "TW",
+      "randori_kind": "randori_tw",
       "randori_count": 6,
       "randori_duration_min": 5.0,
       "rest_between_randoris_min": "NA",
@@ -167,7 +167,7 @@
   "activity_annotated_at": "2026-04-01T16:47:55.234939",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-02T22:50:44.020507",
+  "updated_at": "2026-04-07T14:39:48.507554",
   "fc_phase_segments": [
     {
       "segment_index": 0,
@@ -181,7 +181,7 @@
     },
     {
       "segment_index": 1,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4701.583,
       "end_offset_s": 4934.749,
       "duration_s": 233.166,
@@ -201,7 +201,7 @@
     },
     {
       "segment_index": 3,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 5089.191,
       "end_offset_s": 5461.341,
       "duration_s": 372.15,
@@ -221,7 +221,7 @@
     },
     {
       "segment_index": 5,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 5603.519,
       "end_offset_s": 5842.379,
       "duration_s": 238.86,
@@ -241,7 +241,7 @@
     },
     {
       "segment_index": 7,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 6007.305,
       "end_offset_s": 6274.6,
       "duration_s": 267.295,
@@ -261,7 +261,7 @@
     },
     {
       "segment_index": 9,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 6525.316,
       "end_offset_s": 6796.22,
       "duration_s": 270.904,
@@ -281,10 +281,10 @@
     },
     {
       "segment_index": 11,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 6955.984,
-      "end_offset_s": 7316.01,
-      "duration_s": 360.026,
+      "end_offset_s": 7305.025,
+      "duration_s": 349.041,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -292,9 +292,9 @@
     {
       "segment_index": 12,
       "label": "technique",
-      "start_offset_s": 7316.01,
+      "start_offset_s": 7305.025,
       "end_offset_s": 7407.944,
-      "duration_s": 91.934,
+      "duration_s": 102.919,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -304,5 +304,8 @@
   "session_rpe": 8,
   "rr_clean_filepath": "clean\\20260331_160349\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260331_160349\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-05T18:01:23.360425"
+  "clean_export_timestamp": "2026-04-07T14:00:39.760028",
+  "segment_type_version": 2,
+  "description_synced_from_segmentation": false,
+  "description_synced_at": null
 }

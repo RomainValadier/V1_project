@@ -98,7 +98,7 @@
   "fc_clean_filepath": "clean\\20260323_172758\\fc_clean.parquet",
   "clean_export_timestamp": "2026-04-05T17:59:09.951413",
   "activity_family": "judo",
-  "activity_label": "judo > randoris > mixtes (NW + TW)",
+  "activity_label": "judo > randoris > randori_tw",
   "activity_notes": null,
   "judo_session_type": "randoris",
   "judo_phases": [
@@ -112,15 +112,15 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "phase_label": "randoris NW pure",
-      "phase_category": "randoris",
+      "phase_label": "randori_nw",
+      "phase_category": "randori_nw",
       "needs_randori_details": true
     },
     {
       "phase_index": 2,
       "phase_uid": "phase_3",
-      "phase_label": "randoris TW",
-      "phase_category": "randoris",
+      "phase_label": "randori_tw",
+      "phase_category": "randori_tw",
       "needs_randori_details": true
     },
     {
@@ -135,18 +135,20 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "randori_kind": "NW pure",
+      "randori_kind": "randori_nw",
       "randori_count": "NA",
       "randori_duration_min": 2.0,
-      "rest_between_randoris_min": "NA"
+      "rest_between_randoris_min": "NA",
+      "randori_entries": null
     },
     {
       "phase_index": 2,
       "phase_uid": "phase_3",
-      "randori_kind": "TW",
+      "randori_kind": "randori_tw",
       "randori_count": 9,
       "randori_duration_min": 3.0,
-      "rest_between_randoris_min": "NA"
+      "rest_between_randoris_min": "NA",
+      "randori_entries": null
     }
   ],
   "is_activity_annotated": true,
@@ -177,7 +179,7 @@
     },
     {
       "segment_index": 2,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 3908.303,
       "end_offset_s": 4069.521,
       "duration_s": 161.218,
@@ -197,7 +199,7 @@
     },
     {
       "segment_index": 4,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4168.732,
       "end_offset_s": 4236.559,
       "duration_s": 67.827,
@@ -217,7 +219,7 @@
     },
     {
       "segment_index": 6,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4315.272,
       "end_offset_s": 4608.982,
       "duration_s": 293.71,
@@ -237,7 +239,7 @@
     },
     {
       "segment_index": 8,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4757.799,
       "end_offset_s": 4850.809,
       "duration_s": 93.01,
@@ -257,7 +259,7 @@
     },
     {
       "segment_index": 10,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4919.017,
       "end_offset_s": 4989.658,
       "duration_s": 70.641,
@@ -277,7 +279,7 @@
     },
     {
       "segment_index": 12,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 5319.287,
       "end_offset_s": 5536.148,
       "duration_s": 216.861,
@@ -297,7 +299,7 @@
     },
     {
       "segment_index": 14,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 5808.941,
       "end_offset_s": 6118.574,
       "duration_s": 309.633,
@@ -317,7 +319,7 @@
     },
     {
       "segment_index": 16,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 6415.983,
       "end_offset_s": 6707.196,
       "duration_s": 291.213,
@@ -337,7 +339,7 @@
     },
     {
       "segment_index": 18,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 6756.764,
       "end_offset_s": 7035.585,
       "duration_s": 278.821,
@@ -366,5 +368,8 @@
       "locked": false
     }
   ],
-  "temporally_annotated_at": "2026-04-01T16:57:03.370244"
+  "temporally_annotated_at": "2026-04-01T16:57:03.370244",
+  "segment_type_version": 2,
+  "description_synced_from_segmentation": false,
+  "description_synced_at": null
 }

@@ -162,7 +162,8 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
 - Simplification de Visualisation activite : suppression du resume illustre des phases de seance, et ajout dans le tableau des randoris de la duree manuellement renseignee pour chaque repetition.
 
-- Le tableau RPE des randoris de Visualisation activite affiche maintenant la duree reelle de chaque combat a partir des segments andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans les champs de saisie.
+- Le tableau RPE des randoris de Visualisation activite affiche maintenant la duree reelle de chaque combat a partir des segments 
+andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans les champs de saisie.
 
 - Stabilisation des formulaires de Gestion activites : rechargement des valeurs a partir d'une signature persistante de la seance et re-association des blocs randori via phase_uid pour conserver les parametres enregistres lors des retours sur une activite annotee.
 - Evolution de Visualisation activite : ajout d'un calendrier de selection comme dans Gestion activites, et remplacement du filtre seances completes par un filtre nnotees seulement afin d'afficher aussi les seances deja annotees meme si les RPE ne sont pas encore renseignes.
@@ -192,3 +193,11 @@ Ce fichier suit les modifications apportees au projet suite a tes demandes.
 - Retour des trois graphiques comparatifs sous forme de diagrammes en batons, avec ajout d'une ligne de moyenne et d'un axe Y dynamique borne a `min - 5` / `max + 5` puis recadre dans `[0, 100]`.
 - Correction de la cause racine du non-affichage des barres Altair sur les graphiques comparatifs : avec un axe Y tronque, les barres partaient encore de `0` et se retrouvaient hors domaine ; elles demarrent maintenant explicitement a la borne basse visible du graphique.
 - Amelioration visuelle des graphiques comparatifs : couleur des textes de legende renforcee et affichage de la moyenne dans une legende dediee plus saillante au-dessus de chaque graphique.
+
+- Harmonisation des types judo/segmentation : adoption des labels unifies `randori_tw` / `randori_nw`, mise a jour des palettes et references, et migration retrocompatible automatique des anciennes metadonnees (`randori`, `autre`, `randoris TW/NW`, anciens labels d activite) avec `segment_type_version = 2`.
+- Synchronisation segmentation -> description des randoris : la validation de segmentation recalcule maintenant automatiquement le nombre de randoris, les durees exactes et les recuperations depuis les segments temporels, tout en conservant les RPE/commentaires existants et en ajoutant les flags `description_synced_from_segmentation` / `description_synced_at`.
+- Evolution de Gestion activites : le deroule judo utilise les nouveaux types `randori_tw` / `randori_nw`, la description des randoris s affiche par type avec badge de synchronisation quand elle provient de la segmentation, et l enregistrement remet automatiquement le flag de sync a `false` si l utilisateur modifie manuellement durees ou recuperations.
+- Mise a jour du composant front `frontend/fc_segment_editor/` et des fichiers de reference `seance_judo_phase.txt` / `liste_activite.txt` pour refleter la nouvelle nomenclature et les nouvelles couleurs TW/NW.
+
+- Reintroduction de l auto-segmentation dans Gestion activites : ajout des actions Auto-segmenter et Reinitialiser dans le module de segmentation temporelle, avec generation automatique des segments depuis le repository, chargement immediat dans l editeur et remise a zero de l historique d annulation pour partir d une base proprement modifiable.
+- Correctif UX sur l annotation manuelle du graphe FC dans pages/5_Gestion_activites.py : suppression du rerun force apres selection ou mise a jour d un segment, afin d eviter les reruns en boucle et les sauts de page pendant la manipulation du plot.

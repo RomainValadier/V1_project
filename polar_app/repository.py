@@ -8,7 +8,13 @@ from typing import Any
 
 import pandas as pd
 
-from polar_app.models import ProcessedSession
+from polar_app.models import (
+    SEGMENT_TYPE_VERSION,
+    ProcessedSession,
+    migrate_processed_session_dict,
+    normalize_phase_label,
+    normalize_segment_label,
+)
 
 
 class ProcessedSessionRepository:
@@ -21,11 +27,12 @@ class ProcessedSessionRepository:
     TEMPORAL_SEGMENT_LABELS = [
         "echauffement",
         "technique",
-        "randori",
+        "randori_tw",
+        "randori_nw",
         "recuperation",
         "retour_calme",
-        "autre",
     ]
+    RANDORI_SEGMENT_LABELS = {"randori_tw", "randori_nw"}
     MIN_SEGMENT_DURATION_S = 10.0
 
     def __init__(self, output_dir: str) -> None:
@@ -44,8 +51,7 @@ class ProcessedSessionRepository:
             if not os.path.isfile(meta_path):
                 continue
 
-            with open(meta_path, encoding="utf-8-sig") as file_obj:
-                session = ProcessedSession.from_dict(json.load(file_obj))
+            session = ProcessedSession.from_dict(self._read_session_meta(session_id))
             clean_paths = self.get_clean_paths(session.session_id)
             if os.path.isfile(clean_paths["rr_clean_absolute"]):
                 session.rr_clean_filepath = clean_paths["rr_clean_relative"]
@@ -180,6 +186,18 @@ class ProcessedSessionRepository:
             activity_annotated_at = None
 
         is_judo_randoris = activity_family == "judo" and judo_session_type == "randoris"
+        description_synced_from_segmentation = bool(meta.get("description_synced_from_segmentation", False))
+        description_synced_at = meta.get("description_synced_at")
+        if "description_synced_from_segmentation" in payload:
+            description_synced_from_segmentation = bool(payload.get("description_synced_from_segmentation"))
+            description_synced_at = self._normalize_string(payload.get("description_synced_at")) if description_synced_from_segmentation else None
+        elif description_synced_from_segmentation and is_judo_randoris:
+            description_synced_from_segmentation = self._description_sync_preserved(
+                meta.get("judo_randori_blocks"),
+                judo_randori_blocks,
+            )
+            if not description_synced_from_segmentation:
+                description_synced_at = None
 
         meta["annotation"] = annotation or session.annotation or session.session_id
         meta["activity_family"] = activity_family
@@ -192,12 +210,17 @@ class ProcessedSessionRepository:
         meta["is_activity_annotated"] = is_activity_annotated
         meta["activity_annotated_at"] = activity_annotated_at
         meta["is_archived"] = bool(meta.get("is_archived", False))
+        meta["segment_type_version"] = SEGMENT_TYPE_VERSION
         if not is_judo_randoris:
             meta["fc_phase_segments"] = None
             meta["is_temporally_annotated"] = False
             meta["temporally_annotated_at"] = None
+            meta["description_synced_from_segmentation"] = False
+            meta["description_synced_at"] = None
         else:
             meta["is_temporally_annotated"] = bool(meta.get("is_temporally_annotated", False))
+            meta["description_synced_from_segmentation"] = bool(description_synced_from_segmentation)
+            meta["description_synced_at"] = description_synced_at if description_synced_from_segmentation else None
         meta["updated_at"] = now
         self._write_session_meta(session_id, meta)
 
@@ -281,7 +304,7 @@ class ProcessedSessionRepository:
         hr_sorted["t_offset_s"] = hr_sorted["t_offset_ms"].astype("float64") / 1000.0
         total_duration_s = self._session_total_duration_seconds(session, hr_sorted)
 
-        if not any(phase["label"] == "randori" for phase in phase_entries):
+        if not any(phase["label"] in self.RANDORI_SEGMENT_LABELS for phase in phase_entries):
             raise ValueError("Impossible d'auto-generer : aucune phase randoris n'a ete pre-enregistree pour cette seance.")
 
         def coerce_positive_int(value: Any) -> int | None:
@@ -307,7 +330,7 @@ class ProcessedSessionRepository:
         current_cursor_s = 0.0
 
         for phase_entry in phase_entries:
-            if phase_entry["label"] != "randori":
+            if phase_entry["label"] not in self.RANDORI_SEGMENT_LABELS:
                 pending_non_randori.append(phase_entry)
                 continue
 
@@ -358,7 +381,7 @@ class ProcessedSessionRepository:
 
                 segments.append(
                     {
-                        "label": "randori",
+                        "label": phase_entry["label"],
                         "start_offset_s": current_randori_start_s,
                         "end_offset_s": current_randori_end_s,
                         "source": "auto",
@@ -429,8 +452,14 @@ class ProcessedSessionRepository:
 
     @staticmethod
     def _map_judo_phase_to_segment_label(raw_label: str) -> str | None:
-        if raw_label.startswith("randoris"):
-            return "randori"
+        if raw_label in {"randori_tw", "randori_nw"}:
+            return raw_label
+        if raw_label.startswith("randoris tw"):
+            return "randori_tw"
+        if raw_label.startswith("randoris nw"):
+            return "randori_nw"
+        if raw_label.startswith("randoris libres"):
+            return "randori_tw"
         if raw_label == "echauffement":
             return "echauffement"
         if raw_label == "technique":
@@ -438,7 +467,7 @@ class ProcessedSessionRepository:
         if raw_label in {"retour_calme", "retour calme"}:
             return "retour_calme"
         if raw_label in {"autres", "autre"}:
-            return "autre"
+            return "technique"
         return None
 
     def _detect_randori_start(self, hr_sorted: pd.DataFrame, cursor_s: float, threshold_bpm: float) -> float:
@@ -489,7 +518,7 @@ class ProcessedSessionRepository:
             next_cursor_s = end_s if index == len(items) - 1 else cursor_s + step_s
             segments.append(
                 {
-                    "label": str(item.get("label") or "autre"),
+                    "label": str(item.get("label") or "technique"),
                     "start_offset_s": cursor_s,
                     "end_offset_s": next_cursor_s,
                     "source": "auto",
@@ -508,7 +537,7 @@ class ProcessedSessionRepository:
         for raw_segment in segments:
             if not isinstance(raw_segment, dict):
                 continue
-            label = str(raw_segment.get("label") or "technique")
+            label = normalize_segment_label(raw_segment.get("label")) or "technique"
             if label not in self.TEMPORAL_SEGMENT_LABELS:
                 continue
             start_s = float(max(raw_segment.get("start_offset_s", 0.0), 0.0))
@@ -629,6 +658,7 @@ class ProcessedSessionRepository:
 
         meta["fc_phase_segments"] = normalized_segments or None
         meta["is_temporally_annotated"] = bool(is_valid and normalized_segments)
+        meta["segment_type_version"] = SEGMENT_TYPE_VERSION
         if meta["is_temporally_annotated"]:
             meta["temporally_annotated_at"] = meta.get("temporally_annotated_at") or datetime.now().isoformat()
         else:
@@ -661,7 +691,7 @@ class ProcessedSessionRepository:
             rows.append(
                 {
                     "segment_id": int(segment.get("segment_index", index)),
-                    "type": str(segment.get("label") or "autre"),
+                    "type": str(segment.get("label") or "technique"),
                     "t_debut_s": start_s,
                     "t_fin_s": end_s,
                     "duree_s": max(end_s - start_s, 0),
@@ -684,6 +714,166 @@ class ProcessedSessionRepository:
             )
         return pd.DataFrame(rows)
 
+    def sync_segmentation_to_description(self, session_id: str) -> dict[str, Any]:
+        session = self.get_sessions([session_id], include_archived=True)[0]
+        if not self._is_judo_randoris_session(session):
+            return {"updated": False, "randori_count": 0, "warnings": ["Synchronisation reservee aux seances judo randoris."]}
+
+        meta = self._read_session_meta(session_id)
+        total_duration_s = self._session_total_duration_seconds(session)
+        segments = self.normalize_fc_phase_segments(meta.get("fc_phase_segments") or [], total_duration_s)
+        if not segments:
+            return {"updated": False, "randori_count": 0, "warnings": ["Aucun segment temporel valide a synchroniser."]}
+
+        phase_groups = self._extract_randori_phase_groups(segments)
+        judo_phases = meta.get("judo_phases") or []
+        existing_blocks = meta.get("judo_randori_blocks") or []
+        existing_by_uid = {str(block.get("phase_uid")): block for block in existing_blocks if isinstance(block, dict) and block.get("phase_uid") is not None}
+        existing_by_index = {int(block.get("phase_index")): block for block in existing_blocks if isinstance(block, dict) and block.get("phase_index") is not None}
+
+        warnings: list[str] = []
+        synced_blocks: list[dict[str, Any]] = []
+        group_cursor = 0
+        total_randoris = 0
+
+        for phase_index, phase in enumerate(judo_phases):
+            if not isinstance(phase, dict):
+                continue
+            phase_uid = phase.get("phase_uid")
+            phase_label = normalize_phase_label(phase.get("phase_label") or phase.get("label"))
+            if phase_label not in self.RANDORI_SEGMENT_LABELS:
+                continue
+
+            matched_group = None
+            for search_index in range(group_cursor, len(phase_groups)):
+                candidate = phase_groups[search_index]
+                if candidate["type"] == phase_label:
+                    matched_group = candidate
+                    group_cursor = search_index + 1
+                    break
+            if matched_group is None:
+                matched_group = {"type": phase_label, "randoris": [], "recoveries": []}
+
+            randori_segments = matched_group["randoris"]
+            recovery_segments = matched_group["recoveries"]
+            total_randoris += len(randori_segments)
+
+            old_block = existing_by_uid.get(str(phase_uid)) or existing_by_index.get(phase_index, {})
+            old_count = self._normalize_optional_int(old_block.get("randori_count")) or 0
+            if old_count != len(randori_segments):
+                warnings.append(
+                    f"La segmentation contient {len(randori_segments)} randoris pour {phase_label} mais la description en indiquait {old_count}. Mise a jour automatique du nombre."
+                )
+
+            old_entries = {}
+            for entry in old_block.get("randori_entries") or []:
+                if not isinstance(entry, dict):
+                    continue
+                repetition_index = self._normalize_optional_int(entry.get("repetition_index"))
+                if repetition_index is not None:
+                    old_entries[repetition_index] = entry
+
+            synced_entries: list[dict[str, Any]] = []
+            duration_values: list[float] = []
+            recovery_values: list[float] = []
+            for repetition_index, randori_segment in enumerate(randori_segments, start=1):
+                randori_duration_min = self._round_minutes_to_half(float(randori_segment.get("duration_s", 0.0)) / 60.0)
+                duration_values.append(randori_duration_min)
+                recovery_segment = recovery_segments[repetition_index - 1] if repetition_index - 1 < len(recovery_segments) else None
+                recovery_min = self._round_minutes_to_half(float(recovery_segment.get("duration_s", 0.0)) / 60.0) if recovery_segment else None
+                if recovery_min is not None:
+                    recovery_values.append(recovery_min)
+                previous_entry = old_entries.get(repetition_index, {})
+                synced_entries.append(
+                    {
+                        "repetition_index": repetition_index,
+                        "rpe": previous_entry.get("rpe"),
+                        "comment": previous_entry.get("comment") or "",
+                        "duration_min": randori_duration_min,
+                        "recovery_min": recovery_min,
+                    }
+                )
+
+            synced_blocks.append(
+                {
+                    "phase_index": phase_index,
+                    "phase_uid": phase_uid,
+                    "randori_kind": phase_label,
+                    "randori_count": len(randori_segments),
+                    "randori_duration_min": round(sum(duration_values) / len(duration_values), 2) if duration_values else None,
+                    "rest_between_randoris_min": round(sum(recovery_values) / len(recovery_values), 2) if recovery_values else None,
+                    "randori_entries": synced_entries,
+                }
+            )
+
+        meta["judo_randori_blocks"] = synced_blocks or None
+        meta["description_synced_from_segmentation"] = True
+        meta["description_synced_at"] = datetime.now().isoformat()
+        meta["updated_at"] = datetime.now().isoformat()
+        meta["segment_type_version"] = SEGMENT_TYPE_VERSION
+        self._write_session_meta(session_id, meta)
+        return {"updated": True, "randori_count": total_randoris, "warnings": warnings}
+
+    def _extract_randori_phase_groups(self, segments: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        groups: list[dict[str, Any]] = []
+        items = list(segments or [])
+        index = 0
+        while index < len(items):
+            current = items[index]
+            current_label = normalize_segment_label(current.get("label"))
+            if current_label not in self.RANDORI_SEGMENT_LABELS:
+                index += 1
+                continue
+            group = {"type": current_label, "randoris": [current], "recoveries": []}
+            cursor = index + 1
+            while cursor < len(items):
+                next_label = normalize_segment_label(items[cursor].get("label"))
+                if next_label == "recuperation" and cursor + 1 < len(items):
+                    after_recovery = items[cursor + 1]
+                    after_label = normalize_segment_label(after_recovery.get("label"))
+                    if after_label == current_label:
+                        group["recoveries"].append(items[cursor])
+                        group["randoris"].append(after_recovery)
+                        cursor += 2
+                        continue
+                break
+            groups.append(group)
+            index = cursor
+        return groups
+
+    @staticmethod
+    def _round_minutes_to_half(duration_min: float | None) -> float | None:
+        if duration_min is None:
+            return None
+        return round(float(duration_min) * 2.0) / 2.0
+
+    @staticmethod
+    def _description_sync_preserved(previous_blocks: Any, new_blocks: Any) -> bool:
+        if not previous_blocks or not new_blocks:
+            return bool(previous_blocks == new_blocks)
+        previous_by_uid = {str(block.get("phase_uid")): block for block in previous_blocks if isinstance(block, dict)}
+        for block in new_blocks:
+            if not isinstance(block, dict):
+                continue
+            previous = previous_by_uid.get(str(block.get("phase_uid")))
+            if previous is None:
+                return False
+            if (previous.get("randori_count") or 0) != (block.get("randori_count") or 0):
+                return False
+            previous_entries = {int(entry.get("repetition_index")): entry for entry in (previous.get("randori_entries") or []) if isinstance(entry, dict) and entry.get("repetition_index") is not None}
+            for entry in block.get("randori_entries") or []:
+                if not isinstance(entry, dict):
+                    continue
+                repetition_index = entry.get("repetition_index")
+                if repetition_index is None:
+                    continue
+                previous_entry = previous_entries.get(int(repetition_index), {})
+                if previous_entry.get("duration_min") != entry.get("duration_min"):
+                    return False
+                if previous_entry.get("recovery_min") != entry.get("recovery_min"):
+                    return False
+        return True
+
     def delete_session(self, session_id: str) -> None:
         for branch in ("raw", "processed"):
             target_dir = os.path.join(self.output_dir, branch, session_id)
@@ -696,7 +886,11 @@ class ProcessedSessionRepository:
     def _read_session_meta(self, session_id: str) -> dict[str, Any]:
         meta_path = self._meta_path(session_id)
         with open(meta_path, encoding="utf-8-sig") as file_obj:
-            return json.load(file_obj)
+            meta = json.load(file_obj)
+        migrated_meta, changed = migrate_processed_session_dict(meta)
+        if changed:
+            self._write_session_meta(session_id, migrated_meta)
+        return migrated_meta
 
     def _write_session_meta(self, session_id: str, meta: dict[str, Any]) -> None:
         meta_path = self._meta_path(session_id)

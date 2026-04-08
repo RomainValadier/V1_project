@@ -111,7 +111,7 @@
   "fc_clean_filepath": "clean\\20260324_162922\\fc_clean.parquet",
   "clean_export_timestamp": "2026-04-05T17:59:47.320092",
   "activity_family": "judo",
-  "activity_label": "judo > randoris > TW",
+  "activity_label": "judo > randoris > randori_tw",
   "activity_notes": null,
   "judo_session_type": "randoris",
   "judo_phases": [
@@ -125,8 +125,8 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "phase_label": "randoris TW",
-      "phase_category": "randoris",
+      "phase_label": "randori_tw",
+      "phase_category": "randori_tw",
       "needs_randori_details": true
     },
     {
@@ -141,10 +141,11 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "randori_kind": "TW",
+      "randori_kind": "randori_tw",
       "randori_count": 7,
       "randori_duration_min": 5.0,
-      "rest_between_randoris_min": "NA"
+      "rest_between_randoris_min": "NA",
+      "randori_entries": null
     }
   ],
   "is_activity_annotated": true,
@@ -165,7 +166,7 @@
     },
     {
       "segment_index": 1,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 1807.265,
       "end_offset_s": 1987.265,
       "duration_s": 180.0,
@@ -185,7 +186,7 @@
     },
     {
       "segment_index": 3,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 2094.535,
       "end_offset_s": 2392.571,
       "duration_s": 298.036,
@@ -205,7 +206,7 @@
     },
     {
       "segment_index": 5,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 2944.491,
       "end_offset_s": 3248.047,
       "duration_s": 303.556,
@@ -225,7 +226,7 @@
     },
     {
       "segment_index": 7,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 3380.507,
       "end_offset_s": 3712.379,
       "duration_s": 331.872,
@@ -245,7 +246,7 @@
     },
     {
       "segment_index": 9,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 3883.474,
       "end_offset_s": 4192.549,
       "duration_s": 309.075,
@@ -265,7 +266,7 @@
     },
     {
       "segment_index": 11,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4319.49,
       "end_offset_s": 4645.123,
       "duration_s": 325.633,
@@ -285,7 +286,7 @@
     },
     {
       "segment_index": 13,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4766.545,
       "end_offset_s": 5047.304,
       "duration_s": 280.759,
@@ -314,5 +315,8 @@
       "locked": false
     }
   ],
-  "temporally_annotated_at": "2026-04-01T16:19:11.927085"
+  "temporally_annotated_at": "2026-04-01T16:19:11.927085",
+  "segment_type_version": 2,
+  "description_synced_from_segmentation": false,
+  "description_synced_at": null
 }

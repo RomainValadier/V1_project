@@ -1,0 +1,29 @@
+=== ACTIVITE 001 ===
+Debut         : 2026-04-07 15:41:55
+Fin           : 2026-04-07 18:44:25
+Duree totale  : 3 h 02 min 31 s
+
+Segments fusionnes : 7
+  Segment 0 : 20260407_154153 | debut 15:41:55 | fin 16:47:53 | duree 1 h 05 min 59 s
+  Segment 1 : 20260407_164822 | debut 16:48:23 | fin 16:48:28 | duree 0 min 05 s
+  Segment 2 : 20260407_164841 | debut 16:48:42 | fin 17:30:58 | duree 42 min 15 s
+  Segment 3 : 20260407_173151 | debut 17:31:54 | fin 18:00:09 | duree 28 min 16 s
+  Segment 4 : 20260407_180025 | debut 18:00:28 | fin 18:41:44 | duree 41 min 17 s
+  Segment 5 : 20260407_184242 | debut 18:42:46 | fin 18:43:05 | duree 0 min 18 s
+  Segment 6 : 20260407_184328 | debut 18:43:32 | fin 18:44:25 | duree 0 min 54 s
+
+Deconnexions fusionnees : 6
+  Gap 20260407_154153 -> 20260407_164822 | duree 30s | statut user_confirmed_merge
+  Gap 20260407_164822 -> 20260407_164841 | duree 14s | statut auto_merge
+  Gap 20260407_164841 -> 20260407_173151 | duree 56s | statut user_confirmed_merge
+  Gap 20260407_173151 -> 20260407_180025 | duree 18s | statut auto_merge
+  Gap 20260407_180025 -> 20260407_184242 | duree 62s | statut user_confirmed_merge
+  Gap 20260407_184242 -> 20260407_184328 | duree 27s | statut auto_merge
+
+Doublons detectes : 0
+
+Pipeline RR :
+  GAP : 395 (1.7 %)
+  OK : 22413 (97.9 %)
+  POST_RECONNECT_COURT : 11 (0.0 %)
+  POST_RECONNECT_LONG : 83 (0.4 %)

@@ -23,39 +23,39 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 DEFAULT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data")
 ACTIVITY_REFERENCE_PATH = os.path.join(PROJECT_ROOT, "liste_activite.txt")
 JUDO_PHASE_REFERENCE_PATH = os.path.join(PROJECT_ROOT, "seance_judo_phase.txt")
-RANDORI_KIND_OPTIONS = ["TW", "NW pure", "mixtes (NW + TW)", "libres"]
+RANDORI_KIND_OPTIONS = ["randori_tw", "randori_nw"]
 RANDORI_DURATION_OPTIONS = [f"{value:.1f}" for value in [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]]
 RANDORI_COUNT_OPTIONS = ["NA"] + [str(value) for value in range(1, 31)]
 RANDORI_REST_OPTIONS = ["NA"] + [f"{value:.1f}" for value in [index / 2 for index in range(1, 21)]]
 RPE_OPTIONS = ["NA"] + [str(value) for value in range(1, 11)]
-RANDORI_PHASE_LABELS = {"randoris TW", "randoris NW pure", "randoris libres"}
-TEMPORAL_SEGMENT_LABELS = ["echauffement", "technique", "randori", "recuperation", "retour_calme", "autre"]
+RANDORI_PHASE_LABELS = {"randori_tw", "randori_nw"}
+TEMPORAL_SEGMENT_LABELS = ["echauffement", "technique", "randori_tw", "randori_nw", "recuperation", "retour_calme"]
 TEMPORAL_SEGMENT_COLORS = {
-    "echauffement": "rgba(234, 179, 8, 0.18)",
-    "technique": "rgba(59, 130, 246, 0.18)",
-    "randori": "rgba(220, 38, 38, 0.20)",
-    "recuperation": "rgba(22, 163, 74, 0.18)",
-    "retour_calme": "rgba(139, 92, 246, 0.18)",
-    "autre": "rgba(107, 114, 128, 0.18)",
+    "echauffement": "rgba(93,202,165,0.3)",
+    "technique": "rgba(206,203,246,0.3)",
+    "randori_tw": "rgba(240,153,123,0.3)",
+    "randori_nw": "rgba(237,147,177,0.3)",
+    "recuperation": "rgba(133,183,235,0.3)",
+    "retour_calme": "rgba(211,209,199,0.3)",
 }
 TEMPORAL_SEGMENT_HEX_COLORS = {
-    "echauffement": "#f59e0b",
-    "technique": "#3b82f6",
-    "randori": "#ef4444",
-    "recuperation": "#22c55e",
-    "retour_calme": "#8b5cf6",
-    "autre": "#6b7280",
+    "echauffement": "#1D9E75",
+    "technique": "#534AB7",
+    "randori_tw": "#D85A30",
+    "randori_nw": "#D4537E",
+    "recuperation": "#378ADD",
+    "retour_calme": "#888780",
 }
 SELECTED_EVENT_BACKGROUND = "#f59e0b"
 SELECTED_EVENT_BORDER = "#b45309"
 SELECTED_EVENT_TEXT = "#1f2937"
 SEGMENT_UI_PALETTE = {
     "echauffement": {"bg": "rgba(93,202,165,0.3)", "border": "#1D9E75", "text": "#085041"},
-    "randori": {"bg": "rgba(240,153,123,0.3)", "border": "#D85A30", "text": "#712B13"},
+    "randori_tw": {"bg": "rgba(240,153,123,0.3)", "border": "#D85A30", "text": "#712B13"},
+    "randori_nw": {"bg": "rgba(237,147,177,0.3)", "border": "#D4537E", "text": "#72243E"},
     "recuperation": {"bg": "rgba(133,183,235,0.3)", "border": "#378ADD", "text": "#0C447C"},
     "technique": {"bg": "rgba(206,203,246,0.3)", "border": "#534AB7", "text": "#3C3489"},
     "retour_calme": {"bg": "rgba(211,209,199,0.3)", "border": "#888780", "text": "#444441"},
-    "autre": {"bg": "rgba(250,199,117,0.3)", "border": "#BA7517", "text": "#633806"},
 }
 FC_SEGMENT_EDITOR = fc_segment_editor
 
@@ -162,8 +162,8 @@ def terminal_category_label(raw_label: str | None) -> str:
 
 
 def segment_palette(label: str | None) -> dict[str, str]:
-    normalized = str(label or "autre").strip().lower()
-    return SEGMENT_UI_PALETTE.get(normalized, SEGMENT_UI_PALETTE["autre"])
+    normalized = str(label or "technique").strip().lower()
+    return SEGMENT_UI_PALETTE.get(normalized, SEGMENT_UI_PALETTE["technique"])
 
 
 def build_badge_html(label: str, *, tone: str = "default") -> str:
@@ -345,11 +345,11 @@ def activity_label_options(activity_family: str | None, activity_options: list[s
 
 
 def phase_is_randori(phase_label: str) -> bool:
-    return phase_label in RANDORI_PHASE_LABELS
+    return str(phase_label).strip().lower() in RANDORI_PHASE_LABELS
 
 
 def phase_category(phase_label: str) -> str:
-    return "randoris" if phase_is_randori(phase_label) else phase_label
+    return str(phase_label).strip().lower()
 
 
 def saved_phase_labels(session) -> list[str]:
@@ -373,13 +373,9 @@ def current_phase_labels(session_id: str) -> list[str]:
 
 
 def default_randori_kind(phase_label: str) -> str:
-    if phase_label == "randoris TW":
-        return "TW"
-    if phase_label == "randoris NW pure":
-        return "NW pure"
-    if phase_label == "randoris libres":
-        return "libres"
-    return "mixtes (NW + TW)"
+    if phase_label == "randori_nw":
+        return "randori_nw"
+    return "randori_tw"
 
 
 def to_optional_number(raw_value: str | None, integer: bool = False) -> str | int | float:
@@ -485,14 +481,14 @@ def temporal_status_label(segments: list[dict[str, Any]]) -> str:
 def serialize_temporal_segments_for_component(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     serialized: list[dict[str, Any]] = []
     for index, segment in enumerate(segments):
-        label = str(segment.get("label") or "autre")
+        label = str(segment.get("label") or "technique")
         serialized.append(
             {
                 "id": int(segment.get("segment_index", index)),
                 "type": label,
                 "t_debut_s": round(float(segment.get("start_offset_s", 0.0)), 3),
                 "t_fin_s": round(float(segment.get("end_offset_s", 0.0)), 3),
-                "color": TEMPORAL_SEGMENT_HEX_COLORS.get(label, TEMPORAL_SEGMENT_HEX_COLORS["autre"]),
+                "color": TEMPORAL_SEGMENT_HEX_COLORS.get(label, TEMPORAL_SEGMENT_HEX_COLORS["technique"]),
             }
         )
     return serialized
@@ -501,7 +497,7 @@ def serialize_temporal_segments_for_component(segments: list[dict[str, Any]]) ->
 def deserialize_temporal_segments_from_component(raw_segments: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     deserialized: list[dict[str, Any]] = []
     for index, segment in enumerate(raw_segments or []):
-        label = str(segment.get("type") or segment.get("label") or "autre")
+        label = str(segment.get("type") or segment.get("label") or "technique")
         deserialized.append(
             {
                 "segment_index": int(segment.get("id", index)),
@@ -553,8 +549,8 @@ def build_plotly_hr_figure(
     fig.add_vline(x=float(total_duration_s), line_color="rgba(71, 85, 105, 0.45)", line_width=1, line_dash="dash")
     for segment in segments:
         is_selected = selected_segment_index is not None and int(segment.get("segment_index", -1)) == int(selected_segment_index)
-        palette = segment_palette(str(segment.get("label") or "autre"))
-        label = str(segment.get("label", "segment"))
+        palette = segment_palette(str(segment.get("label") or "technique"))
+        label = str(segment.get("label", "segment")).replace("_", " ")
         fig.add_vrect(
             x0=float(segment.get("start_offset_s", 0.0)),
             x1=float(segment.get("end_offset_s", 0.0)),
@@ -850,6 +846,27 @@ def update_selected_temporal_segment(
     return True
 
 
+def auto_generate_temporal_segments(session_id: str, repository: ProcessedSessionRepository, total_duration_s: float) -> bool:
+    try:
+        generated_segments = repository.generate_default_fc_phase_segments(session_id)
+        saved_segments = repository.save_fc_phase_segments(session_id, generated_segments)
+    except Exception as exc:
+        st.session_state['activity_management_notice'] = {
+            'level': 'warning',
+            'message': f'Auto-segmentation impossible : {exc}',
+        }
+        return False
+
+    set_temporal_segments_state(session_id, saved_segments, total_duration_s, repository)
+    reset_temporal_history(session_id, saved_segments)
+    st.session_state[temporal_selected_segment_key(session_id)] = 0 if saved_segments else None
+    st.session_state['activity_management_notice'] = {
+        'level': 'success',
+        'message': 'Auto-segmentation generee. Les segments sont prets a etre ajustes sur le graphe.',
+    }
+    return True
+
+
 def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repository: ProcessedSessionRepository) -> None:
     session_id = session.session_id
     total_duration_s = max(float(session.duree_s or 0.0), float(hr_frame['t_offset_ms'].max()) / 1000.0 if not hr_frame.empty else 0.0)
@@ -870,18 +887,26 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
         if active_segment is None:
             st.markdown(build_badge_html('Aucun segment selectionne', tone='muted'), unsafe_allow_html=True)
         else:
-            label = str(active_segment.get('label') or 'autre')
+            label = str(active_segment.get('label') or 'technique')
             summary = f"{format_offset_label(active_segment.get('start_offset_s'))} -> {format_offset_label(active_segment.get('end_offset_s'))} ({format_duration(active_segment.get('duration_s'))})"
             st.markdown(build_segment_chip_html(label, summary), unsafe_allow_html=True)
     with top_bar[1]:
-        undo_cols = st.columns(2)
-        if undo_cols[0].button('Annuler', disabled=not can_undo, use_container_width=True, key=f'undo_seg_{session_id}'):
+        action_cols = st.columns(4)
+        if action_cols[0].button('Annuler', disabled=not can_undo, use_container_width=True, key=f'undo_seg_{session_id}'):
             if restore_temporal_history(session_id, repository, total_duration_s, -1):
                 st.session_state['activity_management_notice'] = {'level': 'success', 'message': 'Modification annulee.'}
                 st.rerun()
-        if undo_cols[1].button('Retablir', disabled=not can_redo, use_container_width=True, key=f'redo_seg_{session_id}'):
+        if action_cols[1].button('Retablir', disabled=not can_redo, use_container_width=True, key=f'redo_seg_{session_id}'):
             if restore_temporal_history(session_id, repository, total_duration_s, 1):
                 st.session_state['activity_management_notice'] = {'level': 'success', 'message': 'Modification retablie.'}
+                st.rerun()
+        if action_cols[2].button('Auto-segmenter', use_container_width=True, key=f'auto_seg_{session_id}'):
+            if auto_generate_temporal_segments(session_id, repository, total_duration_s):
+                st.session_state['activity_form_session_id'] = None
+                st.rerun()
+        if action_cols[3].button('Reinitialiser', use_container_width=True, key=f'reset_seg_{session_id}', disabled=not segments):
+            if auto_generate_temporal_segments(session_id, repository, total_duration_s):
+                st.session_state['activity_form_session_id'] = None
                 st.rerun()
 
     hr_points = build_hr_points_for_component(hr_frame)
@@ -904,12 +929,13 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
                 st.session_state[temporal_selected_segment_key(session_id)] = int(selected_segment_component_index)
                 selected_segment_index = int(selected_segment_component_index)
             if component_value.get('event_type') == 'segment_selected':
-                st.rerun()
+                # The component interaction already causes one rerun.
+                # Avoid forcing another one, which makes the page jump while annotating.
+                pass
             elif component_value.get('event_type') == 'segments_updated':
                 updated_segments = deserialize_temporal_segments_from_component(component_value.get('segments') or [])
                 if persist_temporal_segments(session_id, updated_segments, total_duration_s, repository):
                     st.session_state['activity_management_notice'] = {'level': 'success', 'message': f'Segments temporels mis a jour pour {session_id}.'}
-                    st.rerun()
 
     segments = st.session_state.get(temporal_segments_key(session_id), [])
     selected_segment_index = st.session_state.get(temporal_selected_segment_key(session_id))
@@ -923,7 +949,7 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
         action_segment_key not in st.session_state
         or st.session_state.get(action_segment_sync_key) != int(selected_segment_index)
     ):
-        st.session_state[action_segment_key] = str(active_segment.get('label') or 'autre')
+        st.session_state[action_segment_key] = str(active_segment.get('label') or 'technique')
         st.session_state[action_segment_sync_key] = int(selected_segment_index)
 
     with st.popover('Actions du segment', use_container_width=False):
@@ -937,7 +963,7 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
             st.markdown('---')
             new_segment_key = f'popover_new_segment_type_{session_id}'
             if new_segment_key not in st.session_state:
-                st.session_state[new_segment_key] = 'randori'
+                st.session_state[new_segment_key] = 'randori_tw'
             st.selectbox('Type du nouveau segment', options=TEMPORAL_SEGMENT_LABELS, key=new_segment_key)
             insert_cols = st.columns(2)
             if insert_cols[0].button('Inserer a gauche', key=f'popover_insert_left_{session_id}', use_container_width=True):
@@ -967,7 +993,7 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
                 selected_type_key not in st.session_state
                 or st.session_state.get(selected_type_sync_key) != int(selected_segment_index)
             ):
-                st.session_state[selected_type_key] = str(active_segment.get('label') or 'autre')
+                st.session_state[selected_type_key] = str(active_segment.get('label') or 'technique')
                 st.session_state[selected_type_sync_key] = int(selected_segment_index)
             type_cols = st.columns([2.2, 1.0])
             type_cols[0].selectbox('Type', options=TEMPORAL_SEGMENT_LABELS, key=selected_type_key)
@@ -985,7 +1011,20 @@ def render_temporal_annotation_module(session, hr_frame: pd.DataFrame, repositor
         st.markdown("<div style='display:flex;flex-direction:column;gap:0.65rem;justify-content:center;height:100%;'>", unsafe_allow_html=True)
         if st.button('Valider segmentation', key=f'validate_fc_segments_{session_id}', type='primary', use_container_width=True, disabled=not segments):
             if persist_temporal_segments(session_id, segments, total_duration_s, repository):
-                st.session_state['activity_management_notice'] = {'level': 'success', 'message': f'Segmentation temporelle validee pour {session_id}.'}
+                sync_result = repository.sync_segmentation_to_description(session_id)
+                warnings = sync_result.get('warnings') or []
+                randori_count = int(sync_result.get('randori_count') or 0)
+                if warnings:
+                    st.session_state['activity_management_notice'] = {
+                        'level': 'warning',
+                        'message': ' '.join(warnings),
+                    }
+                else:
+                    st.session_state['activity_management_notice'] = {
+                        'level': 'success',
+                        'message': f'Description randoris mise a jour depuis la segmentation ({randori_count} randoris, durees et recuperations recalculees).',
+                    }
+                st.session_state['activity_form_session_id'] = None
                 st.rerun()
         export_frame = repository.build_fc_phase_segments_export_frame(segments)
         export_csv = export_frame.to_csv(index=False) if not export_frame.empty else "segment_id,type,t_debut_s,t_fin_s,duree_s\n"
@@ -1089,7 +1128,7 @@ def initialize_form_state(session, repository: ProcessedSessionRepository) -> No
         kind_default = str(block.get("randori_kind") or default_randori_kind(phase_label))
         count_default = str(block.get("randori_count") or "NA")
         rest_default = str(block.get("rest_between_randoris_min") or "NA")
-        duration_default = str(block.get("randori_duration_min") or ("NA" if kind_default == "libres" else "4.0"))
+        duration_default = str(block.get("randori_duration_min") or "4.0")
         st.session_state[f"randori_kind_{session_id}_{phase_uid}"] = kind_default
         st.session_state[f"randori_count_{session_id}_{phase_uid}"] = count_default
         st.session_state[f"randori_rest_{session_id}_{phase_uid}"] = rest_default
@@ -1134,7 +1173,7 @@ def append_phase(session_id: str, phase_label: str) -> None:
     st.session_state[f"randori_kind_{session_id}_{phase_uid}"] = default_randori_kind(phase_label)
     st.session_state[f"randori_count_{session_id}_{phase_uid}"] = "NA"
     st.session_state[f"randori_rest_{session_id}_{phase_uid}"] = "NA"
-    st.session_state[f"randori_duration_{session_id}_{phase_uid}"] = "NA" if phase_label == "randoris libres" else "4.0"
+    st.session_state[f"randori_duration_{session_id}_{phase_uid}"] = "4.0"
 
 
 def move_phase(session_id: str, phase_uid: str, direction: int) -> None:
@@ -1156,9 +1195,16 @@ def remove_phase(session_id: str, phase_uid: str) -> None:
     st.session_state[phase_items_key] = phase_items
 
 
-def build_phase_payload(session_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def build_phase_payload(session_id: str, session: Any | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
     phases: list[dict[str, Any]] = []
     randori_blocks: list[dict[str, Any]] = []
+    preserve_sync = bool(getattr(session, "description_synced_from_segmentation", False))
+    previous_blocks_by_uid: dict[str, dict[str, Any]] = {}
+    if session is not None:
+        for block in getattr(session, "judo_randori_blocks", None) or []:
+            if isinstance(block, dict) and block.get("phase_uid") is not None:
+                previous_blocks_by_uid[str(block.get("phase_uid"))] = block
+
     for phase_index, item in enumerate(st.session_state.get(f"phase_items_{session_id}", [])):
         phase_uid = item["phase_uid"]
         phase_label = st.session_state.get(f"phase_label_{session_id}_{phase_uid}", item["phase_label"])
@@ -1174,7 +1220,9 @@ def build_phase_payload(session_id: str) -> tuple[list[dict[str, Any]], list[dic
         )
         if not needs_randori_details:
             continue
+
         randori_count = to_optional_number(st.session_state.get(f"randori_count_{session_id}_{phase_uid}"), integer=True)
+        randori_kind = default_randori_kind(phase_label)
         randori_entries: list[dict[str, Any]] = []
         duration_values: list[float] = []
         recovery_values: list[float] = []
@@ -1194,20 +1242,74 @@ def build_phase_payload(session_id: str) -> tuple[list[dict[str, Any]], list[dic
                         "recovery_min": recovery_value if repetition_index < randori_count else None,
                     }
                 )
+
         block_duration = round(sum(duration_values) / len(duration_values), 2) if duration_values else to_optional_number(st.session_state.get(f"randori_duration_{session_id}_{phase_uid}"), integer=False)
         block_recovery = round(sum(recovery_values) / len(recovery_values), 2) if recovery_values else to_optional_number(st.session_state.get(f"randori_rest_{session_id}_{phase_uid}"), integer=False)
         randori_blocks.append(
             {
                 "phase_index": phase_index,
                 "phase_uid": phase_uid,
-                "randori_kind": st.session_state.get(f"randori_kind_{session_id}_{phase_uid}", default_randori_kind(phase_label)),
+                "randori_kind": randori_kind,
                 "randori_count": randori_count,
                 "randori_duration_min": block_duration,
                 "rest_between_randoris_min": block_recovery,
                 "randori_entries": randori_entries,
             }
         )
-    return phases, randori_blocks
+
+        if preserve_sync:
+            previous_block = previous_blocks_by_uid.get(str(phase_uid), {})
+            previous_entries = {
+                int(entry.get("repetition_index")): entry
+                for entry in (previous_block.get("randori_entries") or [])
+                if isinstance(entry, dict) and entry.get("repetition_index") is not None
+            }
+            previous_count = previous_block.get("randori_count")
+            current_count = randori_count if isinstance(randori_count, int) else 0
+            if (previous_count or 0) != current_count:
+                preserve_sync = False
+            for entry in randori_entries:
+                previous_entry = previous_entries.get(int(entry.get("repetition_index")), {})
+                if previous_entry.get("duration_min") != entry.get("duration_min"):
+                    preserve_sync = False
+                if previous_entry.get("recovery_min") != entry.get("recovery_min"):
+                    preserve_sync = False
+
+    return phases, randori_blocks, preserve_sync
+
+
+def build_randori_description_groups(session_id: str, phase_rows: list[tuple[int, str, str]]) -> list[dict[str, Any]]:
+    groups_map: dict[str, dict[str, Any]] = {}
+    group_order: list[str] = []
+    for _, phase_uid, current_phase_label in phase_rows:
+        if not phase_is_randori(current_phase_label):
+            continue
+        phase_type = str(current_phase_label).strip().lower()
+        selected_count = st.session_state.get(f'randori_count_{session_id}_{phase_uid}', 'NA')
+        try:
+            repetition_count = int(selected_count) if selected_count not in (None, '', 'NA') else 0
+        except (TypeError, ValueError):
+            repetition_count = 0
+        if repetition_count <= 0:
+            continue
+        if phase_type not in groups_map:
+            groups_map[phase_type] = {'phase_label': phase_type, 'items': []}
+            group_order.append(phase_type)
+        for repetition_index in range(1, repetition_count + 1):
+            rpe_key = f'randori_rpe_{session_id}_{phase_uid}_{repetition_index}'
+            comment_key = f'randori_comment_{session_id}_{phase_uid}_{repetition_index}'
+            duration_key = f'randori_duration_entry_{session_id}_{phase_uid}_{repetition_index}'
+            recovery_key = f'randori_recovery_entry_{session_id}_{phase_uid}_{repetition_index}'
+            if rpe_key not in st.session_state:
+                st.session_state[rpe_key] = 'NA'
+            if comment_key not in st.session_state:
+                st.session_state[comment_key] = ''
+            if duration_key not in st.session_state:
+                st.session_state[duration_key] = 4.0
+            if recovery_key not in st.session_state:
+                st.session_state[recovery_key] = 0.0
+            groups_map[phase_type]['items'].append({'phase_uid': phase_uid, 'phase_label': phase_type, 'repetition_index': repetition_index})
+    return [groups_map[key] for key in group_order]
 
 
 def get_selected_session_id_from_calendar(calendar_state: Any) -> str | None:
@@ -1408,8 +1510,11 @@ def main() -> None:
     current_label = str(st.session_state.get(label_key) or session.activity_label or '')
 
     detail_toggle_key = f'detail_flow_toggle_{session_id}'
+    detail_enabled_key = f'detail_flow_enabled_{session_id}'
+    if detail_enabled_key not in st.session_state:
+        st.session_state[detail_enabled_key] = bool(st.session_state.get(f'phase_items_{session_id}', []))
     if detail_toggle_key not in st.session_state:
-        st.session_state[detail_toggle_key] = bool(st.session_state.get(f'phase_items_{session_id}', []))
+        st.session_state[detail_toggle_key] = bool(st.session_state.get(detail_enabled_key, False))
 
     main_cols = st.columns([1, 1])
     with main_cols[0]:
@@ -1461,13 +1566,14 @@ def main() -> None:
         st.markdown("<div style='font-size:1rem;font-weight:650;color:#173427;margin-bottom:0.9rem;'>Deroule de la seance</div>", unsafe_allow_html=True)
         if st.session_state.get(family_key) != 'judo' or st.session_state.get(judo_type_key) != 'randoris':
             st.info('Aucun deroule detaille pour cette seance.')
-        elif not phase_items and not st.session_state.get(detail_toggle_key):
+        elif not phase_items and not st.session_state.get(detail_enabled_key):
             st.info('Aucun deroule detaille.')
             if st.button('Ajouter un deroule', key=f'activate_flow_{session_id}'):
-                st.session_state[detail_toggle_key] = True
+                st.session_state[detail_enabled_key] = True
                 st.rerun()
         else:
             st.toggle('Detailler le deroule', key=detail_toggle_key)
+            st.session_state[detail_enabled_key] = bool(st.session_state.get(detail_toggle_key, False))
             add_phase_cols = st.columns([3, 1])
             new_phase_key = f'new_phase_{session_id}'
             if new_phase_key not in st.session_state:
@@ -1475,7 +1581,7 @@ def main() -> None:
             add_phase_cols[0].selectbox('Ajouter une phase', options=judo_phase_options or ['echauffement'], key=new_phase_key)
             if add_phase_cols[1].button('+ Phase', key=f'add_phase_button_{session_id}', use_container_width=True):
                 append_phase(session_id, st.session_state.get(new_phase_key, 'echauffement'))
-                st.session_state[detail_toggle_key] = True
+                st.session_state[detail_enabled_key] = True
                 st.rerun()
 
             current_labels = current_phase_labels(session_id)
@@ -1505,54 +1611,39 @@ def main() -> None:
             if has_randori_phase and not randori_details_unlocked:
                 st.info('Commence par enregistrer la structure de la seance pour debloquer les precisions randoris.')
             elif has_randori_phase:
-                st.markdown("<div style='margin-top:0.8rem;font-size:0.9rem;font-weight:600;color:#173427;'>Details phase randoris</div>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-top:0.8rem;font-size:0.9rem;font-weight:600;color:#173427;'>Details phases randoris</div>", unsafe_allow_html=True)
                 for index, phase_uid, current_phase_label in phase_rows:
                     if not phase_is_randori(current_phase_label):
                         continue
-                    detail_cols = st.columns(2)
-                    kind_key = f'randori_kind_{session_id}_{phase_uid}'
                     count_key = f'randori_count_{session_id}_{phase_uid}'
-                    if kind_key not in st.session_state:
-                        st.session_state[kind_key] = default_randori_kind(current_phase_label)
-                    detail_cols[0].selectbox(f'Categorie phase {index + 1}', options=RANDORI_KIND_OPTIONS, key=kind_key)
+                    detail_cols = st.columns([1.5, 1.0])
+                    detail_cols[0].text_input(f'Type phase {index + 1}', value=str(current_phase_label).replace('_', ' '), disabled=True)
                     detail_cols[1].selectbox(f'Nombre phase {index + 1}', options=RANDORI_COUNT_OPTIONS, key=count_key)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if has_randori_phase and randori_details_unlocked:
-        randori_items: list[dict[str, Any]] = []
-        for index, phase_uid, current_phase_label in phase_rows:
-            if not phase_is_randori(current_phase_label):
+        randori_groups = build_randori_description_groups(session_id, phase_rows)
+        for group in randori_groups:
+            randori_items = group['items']
+            if not randori_items:
                 continue
-            selected_count = st.session_state.get(f'randori_count_{session_id}_{phase_uid}', 'NA')
-            try:
-                repetition_count = int(selected_count) if selected_count not in (None, '', 'NA') else 0
-            except (TypeError, ValueError):
-                repetition_count = 0
-            for repetition_index in range(1, repetition_count + 1):
-                rpe_key = f'randori_rpe_{session_id}_{phase_uid}_{repetition_index}'
-                comment_key = f'randori_comment_{session_id}_{phase_uid}_{repetition_index}'
-                duration_key = f'randori_duration_entry_{session_id}_{phase_uid}_{repetition_index}'
-                recovery_key = f'randori_recovery_entry_{session_id}_{phase_uid}_{repetition_index}'
-                if rpe_key not in st.session_state:
-                    st.session_state[rpe_key] = 'NA'
-                if comment_key not in st.session_state:
-                    st.session_state[comment_key] = ''
-                if duration_key not in st.session_state:
-                    st.session_state[duration_key] = 4.0
-                if recovery_key not in st.session_state:
-                    st.session_state[recovery_key] = 0.0
-                randori_items.append({'phase_uid': phase_uid, 'phase_label': current_phase_label, 'repetition_index': repetition_index})
-
-        if randori_items:
-            rated_values = [int(st.session_state.get(f"randori_rpe_{session_id}_{item['phase_uid']}_{item['repetition_index']}")) for item in randori_items if st.session_state.get(f"randori_rpe_{session_id}_{item['phase_uid']}_{item['repetition_index']}") not in (None, '', 'NA')]
+            rated_values = [
+                int(st.session_state.get(f"randori_rpe_{session_id}_{item['phase_uid']}_{item['repetition_index']}"))
+                for item in randori_items
+                if st.session_state.get(f"randori_rpe_{session_id}_{item['phase_uid']}_{item['repetition_index']}") not in (None, '', 'NA')
+            ]
             mean_rpe = round(sum(rated_values) / len(rated_values), 1) if rated_values else None
+            phase_title = 'TW' if group['phase_label'] == 'randori_tw' else 'NW'
             st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
             header_cols = st.columns([2, 1])
-            header_cols[0].markdown("<div style='font-size:1rem;font-weight:650;color:#173427;'>Description randoris</div>", unsafe_allow_html=True)
+            header_cols[0].markdown(f"<div style='font-size:1rem;font-weight:650;color:#173427;'>Description randoris {phase_title}</div>", unsafe_allow_html=True)
             header_cols[1].markdown(f"<div style='text-align:right;color:#5b675e;font-size:0.9rem;margin-top:0.2rem;'>{len(randori_items)} randoris - RPE moyen : {mean_rpe if mean_rpe is not None else '-'}</div>", unsafe_allow_html=True)
-            for row_items in chunked(randori_items, 8):
+            if getattr(session, 'description_synced_from_segmentation', False):
+                st.markdown(build_badge_html('Durees et recuperations issues de la segmentation manuelle', tone='muted'), unsafe_allow_html=True)
+            for row_index, row_items in enumerate(chunked(randori_items, 8)):
                 row_cols = st.columns(len(row_items))
-                for col, item in zip(row_cols, row_items):
+                row_offset = row_index * 8
+                for display_index, (col, item) in enumerate(zip(row_cols, row_items), start=row_offset + 1):
                     phase_uid = item['phase_uid']
                     repetition_index = item['repetition_index']
                     rpe_key = f'randori_rpe_{session_id}_{phase_uid}_{repetition_index}'
@@ -1566,10 +1657,10 @@ def main() -> None:
                     elif numeric_rpe <= 7:
                         bar_color = '#BA7517'
                     else:
-                        bar_color = '#D85A30'
+                        bar_color = '#D85A30' if group['phase_label'] == 'randori_tw' else '#D4537E'
                     bar_height = max(12, numeric_rpe * 10)
                     with col:
-                        st.markdown(f"<div style='font-weight:700;margin-bottom:0.35rem;'>R{len(randori_items[:randori_items.index(item)+1])}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-weight:700;margin-bottom:0.35rem;'>R{display_index}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div style='height:112px;display:flex;align-items:flex-end;justify-content:center;background:#f7f7f5;border-radius:10px;margin-bottom:0.6rem;'><div style='width:42px;height:{bar_height}%;min-height:24px;background:{bar_color};border-radius:10px 10px 6px 6px;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;'>{numeric_rpe if numeric_rpe else '-'}</div></div>", unsafe_allow_html=True)
                         st.selectbox('RPE', options=RPE_OPTIONS, key=rpe_key, label_visibility='collapsed')
                         st.number_input('Duree (min)', min_value=0.0, step=0.5, key=duration_key)
@@ -1589,9 +1680,11 @@ def main() -> None:
         if st.session_state.get(family_key) == "judo":
             payload["judo_session_type"] = st.session_state.get(judo_type_key)
             if st.session_state.get(judo_type_key) == "randoris":
-                judo_phases, judo_randori_blocks = build_phase_payload(session_id)
+                judo_phases, judo_randori_blocks, description_sync_preserved = build_phase_payload(session_id, session)
                 payload["judo_phases"] = judo_phases
                 payload["judo_randori_blocks"] = judo_randori_blocks
+                payload["description_synced_from_segmentation"] = description_sync_preserved
+                payload["description_synced_at"] = getattr(session, "description_synced_at", None) if description_sync_preserved else None
         repository.update_activity_metadata(session_id, payload)
         st.session_state["activity_management_notice"] = {
             "level": "success",

@@ -119,10 +119,10 @@
     const DEFAULT_COLORS = {
       echauffement: '#f59e0b',
       technique: '#3b82f6',
-      randori: '#ef4444',
+      randori_tw: '#D85A30',
+      randori_nw: '#D4537E',
       recuperation: '#22c55e',
       retour_calme: '#8b5cf6',
-      autre: '#6b7280',
     };
 
     const state = {
@@ -173,6 +173,10 @@
       return formatTime(seconds);
     }
 
+    function prettyTypeLabel(type) {
+      return String(type || '').replace(/_/g, ' ');
+    }
+
     function segmentDuration(segment) {
       return Math.max(0, Number(segment.t_fin_s) - Number(segment.t_debut_s));
     }
@@ -180,10 +184,10 @@
     function normalizeSegments(rawSegments) {
       return (rawSegments || []).map((segment, index) => ({
         id: Number(segment.id ?? segment.segment_index ?? index),
-        type: String(segment.type ?? segment.label ?? 'autre'),
+        type: String(segment.type ?? segment.label ?? 'technique'),
         t_debut_s: Number(segment.t_debut_s ?? segment.start_offset_s ?? 0),
         t_fin_s: Number(segment.t_fin_s ?? segment.end_offset_s ?? 0),
-        color: segment.color || DEFAULT_COLORS[String(segment.type ?? segment.label ?? 'autre')] || DEFAULT_COLORS.autre,
+        color: segment.color || DEFAULT_COLORS[String(segment.type ?? segment.label ?? 'technique')] || DEFAULT_COLORS.technique,
       }));
     }
 
@@ -201,7 +205,7 @@
         bannerEl.innerHTML = '<strong>Aucun segment actif</strong> - clique dans une zone coloree pour selectionner un segment.';
         return;
       }
-      bannerEl.innerHTML = `<strong>Segment actif :</strong> ${segment.type} | ${formatTime(segment.t_debut_s)} -> ${formatTime(segment.t_fin_s)} | duree ${formatDuration(segmentDuration(segment))}`;
+      bannerEl.innerHTML = `<strong>Segment actif :</strong> ${prettyTypeLabel(segment.type)} | ${formatTime(segment.t_debut_s)} -> ${formatTime(segment.t_fin_s)} | duree ${formatDuration(segmentDuration(segment))}`;
     }
 
     function buildShapes() {
@@ -235,7 +239,7 @@
         yref: 'paper',
         yshift: -6,
         showarrow: false,
-        text: `${segment.type}<br>${formatDuration(segmentDuration(segment))}`,
+        text: `${prettyTypeLabel(segment.type)}<br>${formatDuration(segmentDuration(segment))}`,
         align: 'center',
         font: {
           size: Number(segment.id) === Number(state.selectedSegmentId) ? 12 : 11,

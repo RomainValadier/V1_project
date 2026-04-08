@@ -83,9 +83,9 @@
   ],
   "rr_clean_filepath": "clean\\20260402_100542\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260402_100542\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-05T17:46:38.248408",
+  "clean_export_timestamp": "2026-04-07T13:57:05.047160",
   "activity_family": "judo",
-  "activity_label": "judo > randoris > TW",
+  "activity_label": "judo > randoris > randori_tw",
   "activity_notes": "Seance randoris surface 5*5",
   "session_rpe": 9,
   "judo_session_type": "randoris",
@@ -100,8 +100,8 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "phase_label": "randoris TW",
-      "phase_category": "randoris",
+      "phase_label": "randori_tw",
+      "phase_category": "randori_tw",
       "needs_randori_details": true
     },
     {
@@ -114,8 +114,8 @@
     {
       "phase_index": 3,
       "phase_uid": "phase_4",
-      "phase_label": "autres",
-      "phase_category": "autres",
+      "phase_label": "technique",
+      "phase_category": "technique",
       "needs_randori_details": false
     }
   ],
@@ -123,7 +123,7 @@
     {
       "phase_index": 1,
       "phase_uid": "phase_2",
-      "randori_kind": "TW",
+      "randori_kind": "randori_tw",
       "randori_count": 5,
       "randori_duration_min": 5.0,
       "rest_between_randoris_min": 5.0,
@@ -160,7 +160,7 @@
   "activity_annotated_at": "2026-04-02T15:16:58.026692",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-03T09:20:08.640310",
+  "updated_at": "2026-04-07T14:27:34.270632",
   "fc_phase_segments": [
     {
       "segment_index": 0,
@@ -174,7 +174,7 @@
     },
     {
       "segment_index": 1,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 4060.742,
       "end_offset_s": 4395.576,
       "duration_s": 334.834,
@@ -186,18 +186,18 @@
       "segment_index": 2,
       "label": "recuperation",
       "start_offset_s": 4395.576,
-      "end_offset_s": 4749.509,
-      "duration_s": 353.933,
+      "end_offset_s": 4668.261,
+      "duration_s": 272.685,
       "source": "manual",
       "phase_uid": null,
       "locked": false
     },
     {
       "segment_index": 3,
-      "label": "randori",
-      "start_offset_s": 4749.509,
-      "end_offset_s": 5127.953,
-      "duration_s": 378.444,
+      "label": "randori_tw",
+      "start_offset_s": 4668.261,
+      "end_offset_s": 5136.209,
+      "duration_s": 467.948,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -205,16 +205,16 @@
     {
       "segment_index": 4,
       "label": "recuperation",
-      "start_offset_s": 5127.953,
+      "start_offset_s": 5136.209,
       "end_offset_s": 5619.93,
-      "duration_s": 491.977,
+      "duration_s": 483.721,
       "source": "manual",
       "phase_uid": null,
       "locked": false
     },
     {
       "segment_index": 5,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 5619.93,
       "end_offset_s": 5952.961,
       "duration_s": 333.031,
@@ -234,7 +234,7 @@
     },
     {
       "segment_index": 7,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 6202.733,
       "end_offset_s": 6634.159,
       "duration_s": 431.426,
@@ -254,10 +254,10 @@
     },
     {
       "segment_index": 9,
-      "label": "randori",
+      "label": "randori_tw",
       "start_offset_s": 7073.154,
-      "end_offset_s": 7391.047,
-      "duration_s": 317.893,
+      "end_offset_s": 7404.671,
+      "duration_s": 331.517,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -265,9 +265,9 @@
     {
       "segment_index": 10,
       "label": "technique",
-      "start_offset_s": 7391.047,
+      "start_offset_s": 7404.671,
       "end_offset_s": 8806.427,
-      "duration_s": 1415.38,
+      "duration_s": 1401.756,
       "source": "manual",
       "phase_uid": null,
       "locked": false
@@ -283,5 +283,8 @@
       "locked": false
     }
   ],
-  "temporally_annotated_at": "2026-04-02T15:21:48.072901"
+  "temporally_annotated_at": "2026-04-02T15:21:48.072901",
+  "segment_type_version": 2,
+  "description_synced_from_segmentation": false,
+  "description_synced_at": null
 }

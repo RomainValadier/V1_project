@@ -42,5 +42,8 @@
   "fc_phase_segments": null,
   "is_temporally_annotated": false,
   "temporally_annotated_at": null,
-  "updated_at": "2026-04-01T22:14:03.495269"
+  "updated_at": "2026-04-01T22:14:03.495269",
+  "segment_type_version": 2,
+  "description_synced_from_segmentation": false,
+  "description_synced_at": null
 }

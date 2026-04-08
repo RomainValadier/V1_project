@@ -1,6 +1,5 @@
-﻿echauffement
+echauffement
 technique
-randoris TW
-randoris NW pure
-randoris libres
-autres
+randori_tw
+randori_nw
+retour_calme

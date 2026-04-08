@@ -1,8 +1,7 @@
-﻿judo
+judo
 judo > technique
-judo > randoris > TW
-judo > randoris > NW pure
-judo > randoris > mixtes (NW + TW)
+judo > randoris > randori_tw
+judo > randoris > randori_nw
 prepa > musculation
 prepa > cardio aerobie
 prepa > cardio fractionnee
