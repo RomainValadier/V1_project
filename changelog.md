@@ -201,3 +201,11 @@ andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans
 
 - Reintroduction de l auto-segmentation dans Gestion activites : ajout des actions Auto-segmenter et Reinitialiser dans le module de segmentation temporelle, avec generation automatique des segments depuis le repository, chargement immediat dans l editeur et remise a zero de l historique d annulation pour partir d une base proprement modifiable.
 - Correctif UX sur l annotation manuelle du graphe FC dans pages/5_Gestion_activites.py : suppression du rerun force apres selection ou mise a jour d un segment, afin d eviter les reruns en boucle et les sauts de page pendant la manipulation du plot.
+
+## 2026-04-09
+
+### Nettoyage RR
+
+- Retrait de la passe B de la post-classification 2 bis dans `polar_app/etape_2bis.py` ; la post-classification 2 bis ne conserve plus que la passe A.
+- Simplification de l'UI 2 bis dans `pages/2_Nettoyage_RR.py` : suppression des parametres `ratio_plancher` et `n_court_max`, et renommage du toggle pour n'activer que la passe A.
+- Nettoyage des metriques 2 bis de `pages/2_Nettoyage_RR.py` pour retirer l'indicateur de faux courts restaures lie a l'ancienne passe B.

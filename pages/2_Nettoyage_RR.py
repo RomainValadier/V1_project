@@ -8,10 +8,23 @@ import pandas as pd
 import streamlit as st
 
 from polar_app.clean_export import export_clean_result
+from polar_app.etape_2bis import (
+    LABEL_2BIS_A,
+    LABEL_2BIS_B,
+    LABEL_2BIS_NONE,
+    run_etape_2bis,
+)
 from polar_app.repository import ProcessedSessionRepository
 from polar_app.rr_pipeline import (
     CORRECTION_FLAG_ORDER,
     DECO_FLAG_ORDER,
+    LABEL_ARTEFACT_ABSOLU,
+    LABEL_COURT,
+    LABEL_FAUX_BATTEMENT,
+    LABEL_GAP_DECO,
+    LABEL_LONG,
+    LABEL_MANQUE,
+    LABEL_OK,
     LABEL_ORDER,
     RAW_ARTIFACT_COLORS,
     RUN_FLAG_ORDER,
@@ -20,6 +33,28 @@ from polar_app.rr_pipeline import (
 )
 
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+DEFAULT_2BIS_PARAMS = {
+    "ratio_max": 1.25,
+    "k_ref": 15,
+    "n_ok_max": 8,
+}
+RAW_LABEL_COLORS = {
+    LABEL_OK: "#64748b",
+    LABEL_GAP_DECO: "#cbd5e1",
+    LABEL_ARTEFACT_ABSOLU: RAW_ARTIFACT_COLORS[LABEL_ARTEFACT_ABSOLU],
+    LABEL_MANQUE: RAW_ARTIFACT_COLORS[LABEL_MANQUE],
+    LABEL_FAUX_BATTEMENT: RAW_ARTIFACT_COLORS[LABEL_FAUX_BATTEMENT],
+    LABEL_LONG: RAW_ARTIFACT_COLORS[LABEL_LONG],
+    LABEL_COURT: RAW_ARTIFACT_COLORS[LABEL_COURT],
+}
+LABEL_2BIS_SHAPES = {
+    LABEL_2BIS_NONE: "circle",
+    LABEL_2BIS_A: "diamond",
+    LABEL_2BIS_B: "triangle-up",
+}
+NON_OK_LABEL_ORDER = [label for label in LABEL_ORDER if label != LABEL_OK]
+RAW_2BIS_COLOR_SCALE = alt.Scale(domain=[LABEL_2BIS_A, LABEL_2BIS_B], range=["#8b5cf6", "#f472b6"])
+RAW_2BIS_SHAPE_SCALE = alt.Scale(domain=[LABEL_2BIS_A, LABEL_2BIS_B], range=["diamond", "triangle-up"])
 
 
 def inject_styles() -> None:
@@ -64,6 +99,69 @@ def sort_sessions(sessions):
     return sorted(sessions, key=lambda session: (session.date, session.heure_debut, session.session_id))
 
 
+def build_2bis_inputs() -> tuple[bool, dict[str, float | int]]:
+    with st.expander("?? ?tape 2 bis ? Post-classification (exp?rimental)", expanded=False):
+        activer_2bis = st.toggle("Activer la passe A", value=False)
+        cols = st.columns(2)
+        ratio_max = cols[0].number_input(
+            "Plafond physiologique (ratio_max)",
+            min_value=1.10,
+            max_value=1.30,
+            value=float(DEFAULT_2BIS_PARAMS["ratio_max"]),
+            step=0.01,
+            format="%.2f",
+        )
+        k_ref = cols[0].number_input(
+            "Beats r?f?rence pr?-bosse (k_ref)",
+            min_value=5,
+            max_value=30,
+            value=int(DEFAULT_2BIS_PARAMS["k_ref"]),
+            step=1,
+        )
+        n_ok_max = cols[1].number_input(
+            "Beats ok max examin?s passe A",
+            min_value=1,
+            max_value=15,
+            value=int(DEFAULT_2BIS_PARAMS["n_ok_max"]),
+            step=1,
+        )
+    return activer_2bis, {
+        "ratio_max": float(ratio_max),
+        "k_ref": int(k_ref),
+        "n_ok_max": int(n_ok_max),
+    }
+
+
+def attach_label_2bis(result, label_2bis_values: list[str] | None = None):
+    analysis = result.analysis_frame.copy()
+    if label_2bis_values is None:
+        analysis["label_2bis"] = LABEL_2BIS_NONE
+    else:
+        analysis["label_2bis"] = pd.Series(label_2bis_values, index=analysis.index, dtype="object")
+    result.analysis_frame = analysis
+
+    cleaned = result.cleaned_frame.copy()
+    if cleaned.empty:
+        result.cleaned_frame = cleaned
+        return result
+
+    def aggregate(row):
+        start = int(row["source_index_start"]) if pd.notna(row.get("source_index_start")) else None
+        end = int(row["source_index_end"]) if pd.notna(row.get("source_index_end")) else None
+        if start is None or end is None:
+            return LABEL_2BIS_NONE
+        values = analysis.loc[start:end, "label_2bis"].fillna(LABEL_2BIS_NONE).astype(str).tolist()
+        if LABEL_2BIS_A in values:
+            return LABEL_2BIS_A
+        if LABEL_2BIS_B in values:
+            return LABEL_2BIS_B
+        return LABEL_2BIS_NONE
+
+    cleaned["label_2bis"] = cleaned.apply(aggregate, axis=1)
+    result.cleaned_frame = cleaned
+    return result
+
+
 def build_parameter_inputs(defaults: RRCleaningParams) -> RRCleaningParams:
     render_section_label("Paramètres du pipeline v3")
     values: dict[str, float | int] = {}
@@ -100,14 +198,13 @@ def build_parameter_inputs(defaults: RRCleaningParams) -> RRCleaningParams:
     return RRCleaningParams(**{key: (int(value) if isinstance(getattr(defaults, key), int) else float(value)) for key, value in values.items()})
 
 
-def build_raw_chart(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_raw_chart(frame: pd.DataFrame, rr_display_cap_ms: float) -> pd.DataFrame:
     chart = frame.copy()
     chart["t_min"] = chart["t_offset_ms"] / 60000.0
-    chart["rr_plot_ms"] = chart["rr_interval_ms"].where(chart["rr_interval_ms"] > 0, np.nan)
-    chart["line_group"] = chart["rr_plot_ms"].isna().astype(int).cumsum()
-    artifacts = chart.loc[chart["label"].isin(list(RAW_ARTIFACT_COLORS.keys()))].copy()
-    return chart.loc[chart["rr_plot_ms"].notna()].copy(), artifacts
-
+    positive_rr = chart["rr_interval_ms"].where(chart["rr_interval_ms"] > 0, np.nan)
+    chart["rr_plot_ms"] = positive_rr.clip(upper=rr_display_cap_ms)
+    chart["label_2bis"] = chart.get("label_2bis", LABEL_2BIS_NONE)
+    return chart.loc[chart["rr_plot_ms"].notna()].copy()
 
 def build_clean_chart(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     chart = frame.copy()
@@ -116,6 +213,7 @@ def build_clean_chart(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, 
     chart["timeline_step_ms"] = chart["timeline_step_ms"].fillna(0.0)
     chart["t_min"] = chart["timeline_step_ms"].cumsum() / 60000.0
     chart["line_group"] = chart["display_rr_ms"].isna().astype(int).cumsum()
+    chart["label_2bis"] = chart.get("label_2bis", LABEL_2BIS_NONE)
     line_data = chart.loc[chart["display_rr_ms"].notna()].copy()
     corrected = chart.loc[chart["correction_flag"].isin(["division", "fusion", "interpolation_pchip", "interpolation_lineaire"]) & chart["display_rr_ms"].notna()].copy()
     excluded = chart.loc[chart["display_rr_ms"].isna()].copy()
@@ -193,6 +291,26 @@ def build_dense_zone_summary(cleaned_frame: pd.DataFrame) -> pd.DataFrame:
 def counts_frame(items: dict[str, int], label: str) -> pd.DataFrame:
     return pd.DataFrame([{label: key, "nombre": value} for key, value in items.items()])
 
+
+def build_progress_updater(progress_bar, progress_state: dict[str, float]):
+    def update(value: float) -> None:
+        bounded = min(max(float(value), 0.0), 1.0)
+        if bounded < progress_state["value"]:
+            bounded = progress_state["value"]
+        progress_state["value"] = bounded
+        progress_bar.progress(bounded, text=f"Calcul du nettoyage RR... {bounded * 100:.0f}%")
+
+    return update
+
+
+def remap_progress(update_progress, start: float, end: float):
+    def wrapped(value: float) -> None:
+        bounded = min(max(float(value), 0.0), 1.0)
+        update_progress(start + ((end - start) * bounded))
+
+    return wrapped
+
+
 def main() -> None:
     st.set_page_config(page_title="Nettoyage RR", layout="wide", initial_sidebar_state="expanded")
     inject_styles()
@@ -219,11 +337,35 @@ def main() -> None:
         show_full_tables = st.toggle("Afficher les tables complètes", value=False)
 
     params = build_parameter_inputs(RRCleaningParams())
+    activer_2bis, params_2bis = build_2bis_inputs()
     session, rr_frame, _ = repository.load_session_data(session_options[selected_label])
-    result = analyze_rr_artifacts(rr_frame, params)
-    clean_paths = export_clean_result(repository, session, result, params)
 
-    st.caption(f"Export clean automatique : {clean_paths['rr_clean_relative']} | {clean_paths['fc_clean_relative']}")
+    progress_bar = st.progress(0.0, text="Calcul du nettoyage RR... 0%")
+    progress_state = {"value": 0.0}
+    update_progress = build_progress_updater(progress_bar, progress_state)
+
+    try:
+        if activer_2bis:
+            result_base = attach_label_2bis(analyze_rr_artifacts(rr_frame, params, progress_callback=remap_progress(update_progress, 0.00, 0.45)))
+            rr_brut = rr_frame["rr_interval_ms"].astype("float64").to_numpy()
+            labels_lipponen = result_base.analysis_frame["label"].astype(str).tolist()
+            update_progress(0.50)
+            labels_modifies, label_2bis_col = run_etape_2bis(rr_brut, labels_lipponen, params=params_2bis)
+            update_progress(0.55)
+            result = attach_label_2bis(analyze_rr_artifacts(rr_frame, params, labels_override=labels_modifies, progress_callback=remap_progress(update_progress, 0.55, 1.00)), label_2bis_col)
+            clean_paths = None
+        else:
+            result = attach_label_2bis(analyze_rr_artifacts(rr_frame, params, progress_callback=update_progress))
+            clean_paths = export_clean_result(repository, session, result, params)
+        update_progress(1.0)
+    except Exception:
+        progress_bar.empty()
+        raise
+
+    if clean_paths is None:
+        st.caption("Mode 2 bis actif : aucun export clean persistant n'est ecrit.")
+    else:
+        st.caption(f"Export clean automatique : {clean_paths['rr_clean_relative']} | {clean_paths['fc_clean_relative']}")
 
     render_section_label("Résumé")
     row1 = st.columns(6)
@@ -241,6 +383,13 @@ def main() -> None:
     row2[4].metric("Segments exclus", str(result.n_segments_exclus))
     row2[5].metric("Qualité globale", result.global_quality_label)
     st.caption(f"Taux non-ok global : {result.global_non_ok_rate * 100:.2f}% | Taux de correction hors cassures : {result.correction_rate_outside_breaks * 100:.2f}%")
+
+    if activer_2bis:
+        n_long_A = int(((result.analysis_frame["label_2bis"] == LABEL_2BIS_A) & (result.analysis_frame["label"] == "long")).sum())
+        n_total = int((result.analysis_frame["label_2bis"] != LABEL_2BIS_NONE).sum())
+        metrics_2bis = st.columns(2)
+        metrics_2bis[0].metric("Artefacts suppl?mentaires (passe A)", str(n_long_A))
+        metrics_2bis[1].metric("Beats modifi?s au total", str(n_total))
 
     counts_col1, counts_col2, counts_col3, counts_col4, counts_col5 = st.columns(5)
     with counts_col1:
@@ -280,26 +429,69 @@ def main() -> None:
             st.dataframe(result.dense_regions_frame, use_container_width=True, hide_index=True)
 
 
-    raw_line, raw_artifacts = build_raw_chart(result.analysis_frame)
+    raw_display_cap_ms = max(float(params.rr_max_ms) * 1.25, 1800.0)
+    raw_points = build_raw_chart(result.analysis_frame, raw_display_cap_ms)
     clean_line, clean_corrected, clean_excluded = build_clean_chart(result.cleaned_frame)
     dense_boxes = build_dense_boxes(result.cleaned_frame, result.dense_regions_frame)
+    base_clean_line, _, _ = build_clean_chart(result_base.cleaned_frame) if activer_2bis else (pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
 
-    artifact_scale = alt.Scale(domain=list(RAW_ARTIFACT_COLORS.keys()), range=list(RAW_ARTIFACT_COLORS.values()))
-    raw_line_chart = alt.Chart(raw_line).mark_line(color="#94a3b8", strokeWidth=1.5).encode(
+    raw_label_points = raw_points.loc[raw_points["label"].ne(LABEL_OK)].copy()
+    raw_2bis_points = raw_points.loc[raw_points["label_2bis"].ne(LABEL_2BIS_NONE)].copy() if activer_2bis else pd.DataFrame()
+
+    raw_line_chart = alt.Chart(raw_points).mark_line(
+        color="#9ca3af",
+        strokeWidth=1.8,
+        opacity=0.95,
+    ).encode(
         x=alt.X("t_min:Q", title="Temps (min)"),
-        y=alt.Y("rr_plot_ms:Q", title="RR brut (ms)"),
-        detail="line_group:N",
+        y=alt.Y("rr_plot_ms:Q", title="RR brut (ms)", scale=alt.Scale(domain=[0, raw_display_cap_ms * 1.02])),
+        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "label_2bis:N", "run_flag:N", "run_series_flag:N", "deco_flag:N"],
     )
-    raw_artifact_chart = alt.Chart(raw_artifacts).mark_circle(size=60).encode(
-        x="t_min:Q",
-        y="rr_plot_ms:Q",
-        color=alt.Color("label:N", scale=artifact_scale, title="LABEL"),
-        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "run_flag:N", "run_series_flag:N", "deco_flag:N"],
-    )
-    clean_line_chart = alt.Chart(clean_line).mark_line(color="#2d5f43", strokeWidth=2.1).encode(
-        x=alt.X("t_min:Q", title="Temps cumulé clean (min)"),
+    raw_chart = raw_line_chart
+    if not raw_label_points.empty:
+        raw_label_scale = alt.Scale(domain=NON_OK_LABEL_ORDER, range=[RAW_LABEL_COLORS[label] for label in NON_OK_LABEL_ORDER])
+        raw_label_chart = alt.Chart(raw_label_points).mark_point(
+            filled=True,
+            size=72,
+            stroke="#ffffff",
+            strokeWidth=1.0,
+            opacity=0.98,
+        ).encode(
+            x="t_min:Q",
+            y="rr_plot_ms:Q",
+            color=alt.Color("label:N", scale=raw_label_scale, title="LABEL"),
+            tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "label_2bis:N", "run_flag:N", "run_series_flag:N", "deco_flag:N"],
+        )
+        raw_chart = raw_chart + raw_label_chart
+    if activer_2bis and not raw_2bis_points.empty:
+        raw_2bis_chart = alt.Chart(raw_2bis_points).mark_point(
+            filled=True,
+            size=170,
+            stroke="#ffffff",
+            strokeWidth=1.0,
+            opacity=0.95,
+        ).encode(
+            x="t_min:Q",
+            y="rr_plot_ms:Q",
+            color=alt.Color("label_2bis:N", scale=RAW_2BIS_COLOR_SCALE, legend=None),
+            shape=alt.Shape("label_2bis:N", scale=RAW_2BIS_SHAPE_SCALE, title="LABEL 2 bis"),
+            tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "label_2bis:N", "run_flag:N", "run_series_flag:N", "deco_flag:N"],
+        )
+        raw_chart = raw_chart + raw_2bis_chart
+    if activer_2bis and not base_clean_line.empty:
+        clean_base_line_chart = alt.Chart(base_clean_line).mark_line(color="#94a3b8", strokeWidth=1.6, strokeDash=[8, 4]).encode(
+            x=alt.X("t_min:Q", title="Temps cumule clean (min)"),
+            y=alt.Y("display_rr_ms:Q", title="RR clean (ms)"),
+            detail="line_group:N",
+            order=alt.Order("t_min:Q"),
+        )
+    else:
+        clean_base_line_chart = None
+    clean_line_chart = alt.Chart(clean_line).mark_line(color="#2d5f43", strokeWidth=2.2).encode(
+        x=alt.X("t_min:Q", title="Temps cumul? clean (min)"),
         y=alt.Y("display_rr_ms:Q", title="RR clean (ms)"),
         detail="line_group:N",
+        order=alt.Order("t_min:Q"),
     )
     present_corrections = [
         method
@@ -328,30 +520,38 @@ def main() -> None:
             ),
             title="Correction",
         ),
-        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "run_flag:N", "run_series_flag:N", "correction_flag:N", "fc_ok:N", "hrr_ok:N", "rmssd_ok:N"],
+        tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "label_2bis:N", "run_flag:N", "run_series_flag:N", "correction_flag:N", "fc_ok:N", "hrr_ok:N", "rmssd_ok:N"],
     )
     clean_excluded_chart = alt.Chart(clean_excluded).mark_tick(thickness=2, size=18, color="#475569").encode(
         x="t_min:Q",
-        tooltip=["t_min:Q", "label:N", "run_flag:N", "run_series_flag:N", "correction_flag:N", "segment_status:N"],
+        tooltip=["t_min:Q", "label:N", "label_2bis:N", "run_flag:N", "run_series_flag:N", "correction_flag:N", "segment_status:N"],
     )
     dense_outline = alt.Chart(dense_boxes).mark_rect(stroke="#0f766e", strokeWidth=3.0, strokeDash=[8, 4], color="#14b8a6", fillOpacity=0.10).encode(
         x="x_start:Q", x2="x_end:Q", y="y_min:Q", y2="y_max:Q", tooltip=["dense_region_id:Q", "nb_points:Q", "nb_artefacts:Q", "densite_artefact_pct:Q"]
     )
 
+    clean_chart = dense_outline + clean_line_chart + clean_corrected_chart + clean_excluded_chart
+    if clean_base_line_chart is not None:
+        clean_chart = dense_outline + clean_base_line_chart + clean_line_chart + clean_corrected_chart + clean_excluded_chart
+
     chart_col1, chart_col2 = st.columns(2)
     with chart_col1:
         render_section_label("RR bruts")
-        st.altair_chart((raw_line_chart + raw_artifact_chart).properties(height=320).interactive(), use_container_width=True)
-        st.caption("Les artefacts bruts sont colorés selon leur LABEL v3.")
+        st.altair_chart(raw_chart.properties(height=320).interactive(), use_container_width=True)
+        if activer_2bis:
+            st.caption("La ligne relie tous les RR bruts. Seuls les points avec label non ok sont mis en avant, et seuls les points avec label_2bis non aucun recoivent un marqueur 2 bis.")
+        else:
+            st.caption("La ligne relie tous les RR bruts. Seuls les points avec label non ok sont mis en avant.")
     with chart_col2:
         render_section_label("RR clean")
-        st.altair_chart((dense_outline + clean_line_chart + clean_corrected_chart + clean_excluded_chart).properties(height=320).interactive(), use_container_width=True)
-        st.caption("Les zones denses run_serie sont encadr?es en vert d'eau. Les points nettoy?s visibles utilisent une couleur et une forme distinctes selon la m?thode de correction.")
+        st.altair_chart(clean_chart.properties(height=320).interactive(), use_container_width=True)
+        st.caption("Les zones denses run_serie sont encadr?es en vert d'eau. Les points nettoy?s visibles utilisent une couleur et une forme distinctes selon la m?thode de correction. Quand l'?tape 2 bis est active, la courbe grise en tirets montre le RR clean pr?-2 bis et la courbe verte le RR clean post-2 bis.")
+
 
 
     render_section_label("Variables interm?diaires")
     variable_columns = [
-        "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label_initial", "label", "run_flag", "run_series_flag",
+        "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label_initial", "label", "label_2bis", "run_flag", "run_series_flag",
         "dRR_ms", "Th1_ms", "dRR_norm", "med_locale_ms", "mRR_brut_ms", "mRR_ms", "Th2_ms", "mRR_norm", "S21", "S22",
         "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw",
     ]
@@ -361,7 +561,7 @@ def main() -> None:
     table_col1, table_col2 = st.columns(2)
     with table_col1:
         render_section_label("Table RR bruts")
-        raw_columns = ["t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label", "run_flag", "run_series_flag", "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw"]
+        raw_columns = ["t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label", "label_2bis", "run_flag", "run_series_flag", "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw"]
         raw_table = result.analysis_frame[raw_columns]
         st.dataframe(raw_table, use_container_width=True, height=340)
     with table_col2:
@@ -370,7 +570,7 @@ def main() -> None:
             point_nettoye=result.cleaned_frame["correction_flag"].isin(["division", "fusion", "interpolation_pchip", "interpolation_lineaire"]),
             zone_dense_artefact=result.cleaned_frame["dense_region_id"].fillna(0).gt(0),
         )
-        clean_columns = ["cleaned_index", "rr_interval_ms", "label", "run_flag", "run_series_flag", "deco_flag", "correction_flag", "point_nettoye", "zone_dense_artefact", "fc_ok", "hrr_ok", "rmssd_ok", "segment_status", "quality_segment_label", "dense_region_id", "source_reference"]
+        clean_columns = ["cleaned_index", "rr_interval_ms", "label", "label_2bis", "run_flag", "run_series_flag", "deco_flag", "correction_flag", "point_nettoye", "zone_dense_artefact", "fc_ok", "hrr_ok", "rmssd_ok", "segment_status", "quality_segment_label", "dense_region_id", "source_reference"]
         cleaned_table = clean_table_source[clean_columns] if show_full_tables else clean_table_source[clean_columns].head(700)
         st.dataframe(cleaned_table, use_container_width=True, height=340)
 

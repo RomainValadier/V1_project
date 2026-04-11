@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -51,6 +52,10 @@ CORRECTION_INTERPOLATION_PCHIP = "interpolation_pchip"
 CORRECTION_INTERPOLATION_LINEAIRE = "interpolation_lineaire"
 CORRECTION_NOT_CLEANED = "not_cleaned"
 CORRECTION_FLAG_ORDER = [CORRECTION_OK, CORRECTION_DIVISION, CORRECTION_FUSION, CORRECTION_INTERPOLATION_PCHIP, CORRECTION_INTERPOLATION_LINEAIRE, CORRECTION_NOT_CLEANED]
+
+LABEL_2BIS_NONE = "aucun"
+LABEL_2BIS_A = "2bis_A"
+LABEL_2BIS_B = "2bis_B"
 
 QUALITY_OK = "OK"
 QUALITY_ALERT = "ALERTE"
@@ -165,6 +170,39 @@ def _quality(rate: float, low: float = 0.05, high: float = 0.15) -> str:
         return QUALITY_ALERT
     return QUALITY_OK
 
+
+def _emit_progress(progress_callback: Callable[[float], None] | None, value: float) -> None:
+    if progress_callback is None:
+        return
+    progress_callback(min(max(float(value), 0.0), 1.0))
+
+
+def _wrap_progress_callback(progress_callback: Callable[[float], None] | None) -> Callable[[float], None]:
+    last = {"value": 0.0}
+
+    def emit(value: float) -> None:
+        bounded = min(max(float(value), 0.0), 1.0)
+        if bounded < last["value"]:
+            bounded = last["value"]
+        last["value"] = bounded
+        _emit_progress(progress_callback, bounded)
+
+    return emit
+
+
+def _progress_chunk(total: int) -> int:
+    if total <= 0:
+        return 1
+    return max(500, total // 50)
+
+
+def _emit_stage_progress(progress_callback: Callable[[float], None] | None, progress_start: float, progress_end: float, current: int, total: int) -> None:
+    if total <= 0:
+        _emit_progress(progress_callback, progress_end)
+        return
+    ratio = min(max(float(current) / float(total), 0.0), 1.0)
+    _emit_progress(progress_callback, progress_start + ((progress_end - progress_start) * ratio))
+
 def _rolling_threshold(values: np.ndarray, window: int, alpha: float) -> np.ndarray:
     out = np.ones(len(values), dtype=float)
     half = window // 2
@@ -254,7 +292,7 @@ def _build_initial_segments(analysis: pd.DataFrame, params: RRCleaningParams) ->
         idx += 1
     return pd.DataFrame(rows)
 
-def _classify_labels(analysis: pd.DataFrame, params: RRCleaningParams) -> pd.DataFrame:
+def _classify_labels(analysis: pd.DataFrame, params: RRCleaningParams, progress_callback: Callable[[float], None] | None = None, progress_start: float = 0.0, progress_end: float = 1.0) -> pd.DataFrame:
     out = analysis.copy()
     labels = out["label_initial"].astype(str).tolist()
     rr = out["rr_interval_ms"].astype("float64").to_numpy()
@@ -270,6 +308,7 @@ def _classify_labels(analysis: pd.DataFrame, params: RRCleaningParams) -> pd.Dat
     s21_raw = np.full(len(out), np.nan)
     s22_raw = np.full(len(out), np.nan)
     if valid_indices:
+        chunk = _progress_chunk(len(valid_indices))
         valid_rr = rr[valid_indices].astype(float)
         drr = np.zeros(len(valid_rr), dtype=float)
         if len(valid_rr) > 1:
@@ -297,7 +336,7 @@ def _classify_labels(analysis: pd.DataFrame, params: RRCleaningParams) -> pd.Dat
             mrr_norm_raw[raw_idx] = mrr_norm[pos]
             s21_raw[raw_idx] = s21[pos]
             s22_raw[raw_idx] = s22[pos]
-        for raw_idx in valid_indices:
+        for progress_idx, raw_idx in enumerate(valid_indices, start=1):
             if labels[raw_idx] in {LABEL_GAP_DECO, LABEL_ARTEFACT_ABSOLU} or labels[raw_idx] != LABEL_A_VERIFIER:
                 continue
             pos = valid_pos[raw_idx]
@@ -317,6 +356,9 @@ def _classify_labels(analysis: pd.DataFrame, params: RRCleaningParams) -> pd.Dat
                     labels[raw_idx] = LABEL_LONG if rr[raw_idx] > med else LABEL_COURT
             else:
                 labels[raw_idx] = LABEL_OK
+            if progress_idx % chunk == 0 or progress_idx == len(valid_indices):
+                _emit_stage_progress(progress_callback, progress_start, progress_end, progress_idx, len(valid_indices))
+    _emit_progress(progress_callback, progress_end)
     out["label"] = labels
     out["dRR_ms"] = drr_raw
     out["Th1_ms"] = th1_raw
@@ -352,12 +394,18 @@ def _initial_run_flags(analysis: pd.DataFrame) -> pd.Series:
     run_flags.loc[(analysis["label"] == LABEL_OK) & analysis["deco_flag"].eq(DECO_OK)] = RUN_OK
     return run_flags
 
-def _assign_run_flags(analysis: pd.DataFrame, segments: pd.DataFrame, params: RRCleaningParams) -> pd.DataFrame:
+def _assign_run_flags(analysis: pd.DataFrame, segments: pd.DataFrame, params: RRCleaningParams, progress_callback: Callable[[float], None] | None = None, progress_start: float = 0.0, progress_end: float = 1.0) -> pd.DataFrame:
     out = analysis.copy()
     out["run_flag"] = _initial_run_flags(out)
     out["run_series_flag"] = RUN_OK
     out["_dense_candidate"] = False
     active_ids = segments.loc[segments["statut_segment"].eq("actif"), "segment_id"].tolist()
+    total_valid = 0
+    for segment_id in active_ids:
+        segment_mask = out["initial_segment_id"].eq(segment_id)
+        total_valid += int((segment_mask & out["deco_flag"].eq(DECO_OK)).sum())
+    processed_valid = 0
+    chunk = _progress_chunk(total_valid)
     for segment_id in active_ids:
         segment_mask = out["initial_segment_id"].eq(segment_id)
         candidate_mask = segment_mask & ~out["label"].isin([LABEL_OK, LABEL_GAP_DECO])
@@ -385,7 +433,11 @@ def _assign_run_flags(analysis: pd.DataFrame, segments: pd.DataFrame, params: RR
             density = float(out.loc[window_indices, "label"].isin(ARTIFACT_LABELS).sum()) / float(len(window_indices))
             if density > params.seuil_densite:
                 out.loc[window_indices, "_dense_candidate"] = True
+            processed_valid += 1
+            if total_valid and (processed_valid % chunk == 0 or processed_valid == total_valid):
+                _emit_stage_progress(progress_callback, progress_start, progress_end, processed_valid, total_valid)
     out.loc[out["_dense_candidate"], "run_series_flag"] = RUN_SERIE
+    _emit_progress(progress_callback, progress_end)
     return out
 
 
@@ -595,7 +647,17 @@ def _exploitability(run_flag: str, run_series_flag: str, correction_flag: str) -
         return True, True, False, False
     return False, False, False, False
 
-def _append_clean_rows(clean_rows: list[dict], values: list[float | None], timestamps: list[pd.Timestamp | pd.NaT], offsets: list[float], source_reference: str, label: str, run_flag: str, run_series_flag: str, deco_flag: str, correction_flag: str, segment_final_id: int, segment_status: str, source_index_start: int, source_index_end: int) -> None:
+def _aggregate_label_2bis(analysis: pd.DataFrame, start: int, end: int) -> str:
+    if "label_2bis" not in analysis.columns:
+        return LABEL_2BIS_NONE
+    values = analysis.loc[start:end, "label_2bis"].fillna(LABEL_2BIS_NONE).astype(str).tolist()
+    if LABEL_2BIS_A in values:
+        return LABEL_2BIS_A
+    if LABEL_2BIS_B in values:
+        return LABEL_2BIS_B
+    return LABEL_2BIS_NONE
+
+def _append_clean_rows(clean_rows: list[dict], values: list[float | None], timestamps: list[pd.Timestamp | pd.NaT], offsets: list[float], source_reference: str, label: str, label_2bis: str, run_flag: str, run_series_flag: str, deco_flag: str, correction_flag: str, segment_final_id: int, segment_status: str, source_index_start: int, source_index_end: int) -> None:
     for pos, value in enumerate(values):
         fc_ok, hrr_ok, rmssd_ok, review = _exploitability(run_flag, run_series_flag, correction_flag)
         clean_rows.append({
@@ -608,6 +670,7 @@ def _append_clean_rows(clean_rows: list[dict], values: list[float | None], times
             "source_index_start": source_index_start,
             "source_index_end": source_index_end,
             "label": label,
+            "label_2bis": label_2bis,
             "run_flag": run_flag,
             "run_series_flag": run_series_flag,
             "deco_flag": deco_flag,
@@ -620,7 +683,7 @@ def _append_clean_rows(clean_rows: list[dict], values: list[float | None], times
             "review_recommended": review,
         })
 
-def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame, params: RRCleaningParams) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame, params: RRCleaningParams, progress_callback: Callable[[float], None] | None = None, progress_start: float = 0.0, progress_end: float = 1.0) -> tuple[pd.DataFrame, pd.DataFrame]:
     clean_rows: list[dict] = []
     correction_raw = analysis["correction_flag_raw"].astype(str).tolist()
     quality_by_segment = quality_segments.set_index("segment_final_id")["qualite_segment"].to_dict() if not quality_segments.empty else {}
@@ -628,7 +691,12 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
     offsets = analysis["t_offset_ms"].astype("float64") if "t_offset_ms" in analysis.columns else pd.Series(np.nan, index=analysis.index)
     rr = analysis["rr_interval_ms"].astype("float64").to_numpy()
     idx = 0
+    total_analysis = len(analysis)
+    chunk = _progress_chunk(total_analysis)
     while idx < len(analysis):
+        current_step = min(idx + 1, total_analysis)
+        if total_analysis and (current_step % chunk == 0 or current_step == total_analysis):
+            _emit_stage_progress(progress_callback, progress_start, progress_end, current_step, total_analysis)
         run_flag = str(analysis.loc[idx, "run_flag"])
         run_series_flag = str(analysis.loc[idx, "run_series_flag"]) if "run_series_flag" in analysis.columns else RUN_OK
         label = str(analysis.loc[idx, "label"])
@@ -637,7 +705,7 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
         segment_final_id = int(analysis.loc[idx, "segment_final_id"]) if pd.notna(analysis.loc[idx, "segment_final_id"]) else 0
         if segment_status == "exclu":
             correction_raw[idx] = CORRECTION_NOT_CLEANED
-            _append_clean_rows(clean_rows, [None], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, run_flag, run_series_flag, deco_flag, CORRECTION_NOT_CLEANED, segment_final_id, segment_status, idx, idx)
+            _append_clean_rows(clean_rows, [None], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_NOT_CLEANED, segment_final_id, segment_status, idx, idx)
             idx += 1
             continue
         if run_flag == RUN_GAP_DECO and deco_flag == DECO_GAP_COURT:
@@ -651,18 +719,18 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
             seq_ts, seq_offsets = _timestamp_sequence(analysis, start, end, length)
             for raw_idx in range(start, end + 1):
                 correction_raw[raw_idx] = method
-            _append_clean_rows(clean_rows, values, seq_ts, seq_offsets, f"{start + 1}-{end + 1}", LABEL_GAP_DECO, RUN_GAP_DECO, RUN_OK, DECO_GAP_COURT, method, segment_final_id, segment_status, start, end)
+            _append_clean_rows(clean_rows, values, seq_ts, seq_offsets, f"{start + 1}-{end + 1}", LABEL_GAP_DECO, _aggregate_label_2bis(analysis, start, end), RUN_GAP_DECO, RUN_OK, DECO_GAP_COURT, method, segment_final_id, segment_status, start, end)
             idx += 1
             continue
         if run_flag in {RUN_GAP_DECO, RUN_GAP_ARTEFACT}:
             correction_raw[idx] = CORRECTION_NOT_CLEANED
-            _append_clean_rows(clean_rows, [None], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, run_flag, run_series_flag, deco_flag, CORRECTION_NOT_CLEANED, segment_final_id, segment_status, idx, idx)
+            _append_clean_rows(clean_rows, [None], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_NOT_CLEANED, segment_final_id, segment_status, idx, idx)
             idx += 1
             continue
         if run_flag in {RUN_OK, RUN_SERIE, RUN_POST_RECONNECT_DECO, RUN_POST_RECONNECT_ARTEFACT}:
             correction_raw[idx] = CORRECTION_OK
             value = float(rr[idx]) if pd.notna(rr[idx]) and rr[idx] > 0 else None
-            _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, run_flag, run_series_flag, deco_flag, CORRECTION_OK, segment_final_id, segment_status, idx, idx)
+            _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_OK, segment_final_id, segment_status, idx, idx)
             idx += 1
             continue
         if run_flag == RUN_ARTEFACT_UNIQUE:
@@ -671,19 +739,19 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
                 midpoint_ts = ts.iloc[idx] - pd.to_timedelta(value, unit="ms") if value is not None and pd.notna(ts.iloc[idx]) else ts.iloc[idx]
                 base_offset = float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan
                 correction_raw[idx] = CORRECTION_DIVISION
-                _append_clean_rows(clean_rows, [value, value], [midpoint_ts, ts.iloc[idx]], [base_offset - value if value is not None and not np.isnan(base_offset) else np.nan, base_offset], f"{idx + 1}a/{idx + 1}b", label, run_flag, run_series_flag, deco_flag, CORRECTION_DIVISION, segment_final_id, segment_status, idx, idx)
+                _append_clean_rows(clean_rows, [value, value], [midpoint_ts, ts.iloc[idx]], [base_offset - value if value is not None and not np.isnan(base_offset) else np.nan, base_offset], f"{idx + 1}a/{idx + 1}b", label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_DIVISION, segment_final_id, segment_status, idx, idx)
             elif label == LABEL_FAUX_BATTEMENT and idx + 1 < len(analysis):
                 correction_raw[idx] = CORRECTION_FUSION
                 correction_raw[idx + 1] = CORRECTION_NOT_CLEANED
                 fused = float(rr[idx]) + float(rr[idx + 1]) if pd.notna(rr[idx]) and pd.notna(rr[idx + 1]) else None
                 target_ts = ts.iloc[idx + 1] if idx + 1 < len(ts) else ts.iloc[idx]
                 target_off = float(offsets.iloc[idx + 1]) if idx + 1 < len(offsets) and pd.notna(offsets.iloc[idx + 1]) else (float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan)
-                _append_clean_rows(clean_rows, [fused], [target_ts], [target_off], f"{idx + 1}+{idx + 2}", label, run_flag, run_series_flag, deco_flag, CORRECTION_FUSION, segment_final_id, segment_status, idx, min(idx + 1, len(analysis) - 1))
+                _append_clean_rows(clean_rows, [fused], [target_ts], [target_off], f"{idx + 1}+{idx + 2}", label, _aggregate_label_2bis(analysis, idx, min(idx + 1, len(analysis) - 1)), run_flag, run_series_flag, deco_flag, CORRECTION_FUSION, segment_final_id, segment_status, idx, min(idx + 1, len(analysis) - 1))
             else:
                 method, anchors = _choose_anchors(analysis, idx, idx, params.y_court, params.tolerance_court)
                 value = float(_interpolate_values(analysis, idx, idx, 1, method, anchors)[0])
                 correction_raw[idx] = method
-                _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, run_flag, run_series_flag, deco_flag, method, segment_final_id, segment_status, idx, idx)
+                _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, method, segment_final_id, segment_status, idx, idx)
             idx += 1
             continue
         if run_flag in {RUN_COURT, RUN_MOYEN}:
@@ -700,12 +768,12 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
             for raw_idx in range(start, end + 1):
                 correction_raw[raw_idx] = method
             block_series_flag = RUN_SERIE if analysis.loc[start:end, "run_series_flag"].eq(RUN_SERIE).any() else RUN_OK
-            _append_clean_rows(clean_rows, values, seq_ts, seq_offsets, f"{start + 1}-{end + 1}", str(analysis.loc[start, "label"]), current_flag, block_series_flag, str(analysis.loc[start, "deco_flag"]), method, segment_final_id, segment_status, start, end)
+            _append_clean_rows(clean_rows, values, seq_ts, seq_offsets, f"{start + 1}-{end + 1}", str(analysis.loc[start, "label"]), _aggregate_label_2bis(analysis, start, end), current_flag, block_series_flag, str(analysis.loc[start, "deco_flag"]), method, segment_final_id, segment_status, start, end)
             idx += 1
             continue
         correction_raw[idx] = CORRECTION_OK
         value = float(rr[idx]) if pd.notna(rr[idx]) and rr[idx] > 0 else None
-        _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, run_flag, run_series_flag, deco_flag, CORRECTION_OK, segment_final_id, segment_status, idx, idx)
+        _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_OK, segment_final_id, segment_status, idx, idx)
         idx += 1
     cleaned = pd.DataFrame(clean_rows)
     if not cleaned.empty:
@@ -713,46 +781,62 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
         cleaned["timeline_step_ms"] = cleaned["rr_interval_ms"].fillna(analysis["source_timeline_step_ms"].median()).astype("float64")
     out = analysis.copy()
     out["correction_flag_raw"] = correction_raw
+    _emit_progress(progress_callback, progress_end)
     return cleaned, out
 
-def analyze_rr_artifacts(frame: pd.DataFrame, params: RRCleaningParams | None = None, bridge_decisions: dict[str, bool] | None = None) -> RRCleaningResult:
+def analyze_rr_artifacts(frame: pd.DataFrame, params: RRCleaningParams | None = None, bridge_decisions: dict[str, bool] | None = None, labels_override: list[str] | None = None, progress_callback: Callable[[float], None] | None = None) -> RRCleaningResult:
     del bridge_decisions
     params = params or RRCleaningParams()
+    emit_progress = _wrap_progress_callback(progress_callback)
     if frame.empty:
+        emit_progress(1.0)
         return _empty_result(frame)
+    emit_progress(0.02)
     analysis = frame.copy().reset_index(drop=True)
     analysis["rr_interval_ms"] = analysis["rr_interval_ms"].astype("float64")
     analysis["source_pipeline_flag"] = _source_flags(analysis)
     analysis["source_timeline_step_ms"] = _source_step_ms(analysis)
     analysis["deco_flag"], deco_breaks = _build_deco_flags(analysis, params)
+    emit_progress(0.10)
     analysis["label_initial"] = LABEL_A_VERIFIER
     analysis.loc[analysis["deco_flag"].ne(DECO_OK), "label_initial"] = LABEL_GAP_DECO
     analysis.loc[analysis["deco_flag"].eq(DECO_OK) & ((analysis["rr_interval_ms"] < params.rr_min_ms) | (analysis["rr_interval_ms"] > params.rr_max_ms)), "label_initial"] = LABEL_ARTEFACT_ABSOLU
     analysis["label"] = analysis["label_initial"]
+    analysis["label_2bis"] = LABEL_2BIS_NONE
     analysis["correction_flag_raw"] = CORRECTION_OK
 
     initial_segments = _build_initial_segments(analysis, params)
+    emit_progress(0.18)
     analysis["initial_segment_id"] = 0
     for row in initial_segments.itertuples(index=False):
         analysis.loc[int(row.index_debut) : int(row.index_fin), "initial_segment_id"] = int(row.segment_id)
 
-    analysis = _classify_labels(analysis, params)
+    analysis = _classify_labels(analysis, params, progress_callback=emit_progress, progress_start=0.18, progress_end=0.45)
+    if labels_override is not None:
+        labels_override_list = list(labels_override)
+        if len(labels_override_list) != len(analysis):
+            raise ValueError("labels_override must have the same length as the input RR frame")
+        analysis["label"] = pd.Series(labels_override_list, index=analysis.index, dtype="object")
     initial_segments = _apply_segment_inclusion(analysis, initial_segments)
+    emit_progress(0.55)
     initial_status = initial_segments.set_index("segment_id")["statut_segment"].to_dict() if not initial_segments.empty else {}
     analysis["initial_segment_status"] = analysis["initial_segment_id"].map(lambda value: initial_status.get(int(value), "exclu") if int(value) > 0 else "exclu")
     analysis.loc[analysis["initial_segment_status"].eq("exclu"), "correction_flag_raw"] = CORRECTION_NOT_CLEANED
 
-    analysis = _assign_run_flags(analysis, initial_segments, params)
+    analysis = _assign_run_flags(analysis, initial_segments, params, progress_callback=emit_progress, progress_start=0.55, progress_end=0.68)
     analysis = _mark_dense_regions(analysis)
     analysis, artefact_breaks = _apply_run_long_breaks(analysis, params)
+    emit_progress(0.76)
 
     final_segments = _build_final_segments(analysis)
+    emit_progress(0.84)
     analysis["segment_final_id"] = 0
     for row in final_segments.itertuples(index=False):
         analysis.loc[int(row.index_debut) : int(row.index_fin), "segment_final_id"] = int(row.segment_final_id)
 
     quality_segments = _quality_segments(analysis, final_segments, initial_segments)
-    cleaned_frame, analysis = _build_cleaned_frame(analysis, quality_segments, params)
+    emit_progress(0.90)
+    cleaned_frame, analysis = _build_cleaned_frame(analysis, quality_segments, params, progress_callback=emit_progress, progress_start=0.90, progress_end=0.98)
     dense_map = analysis["dense_region_id"].to_dict() if "dense_region_id" in analysis.columns else {}
     if not cleaned_frame.empty:
         cleaned_frame["dense_region_id"] = cleaned_frame["source_index_start"].map(lambda idx: int(dense_map.get(int(idx), 0)))
@@ -782,6 +866,7 @@ def analyze_rr_artifacts(frame: pd.DataFrame, params: RRCleaningParams | None = 
     ok_rr_total = int(cleaned_frame["fc_ok"].sum()) if not cleaned_frame.empty else 0
     non_viable_rr_total = int((~cleaned_frame[["fc_ok", "hrr_ok", "rmssd_ok"]].any(axis=1)).sum()) if not cleaned_frame.empty else 0
 
+    emit_progress(1.0)
     return RRCleaningResult(
         analysis_frame=analysis,
         cleaned_frame=cleaned_frame,

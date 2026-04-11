@@ -148,22 +148,22 @@ Au debut d'une nouvelle session :
 
 ### Objectif courant
 
-- Etendre Analyse RR pour filtrer par activite et visualiser plusieurs seances d'une meme activite dans des graphes separes.
-- Etat : fonctionnalite implementee dans `pages/4_Analyse_RR.py`.
+- Simplifier la post-classification 2 bis pour ne conserver que la passe A.
+- Etat : la passe B a ete retiree de `polar_app/etape_2bis.py` et l'UI de `pages/2_Nettoyage_RR.py` n'expose plus ses parametres ni ses metriques.
 
 ### Dernieres decisions actives
 
 - Pipeline RR versionnee en `3.1`.
 - `Gestion activites` sert a l'edition.
 - `Visualisation activite` sert a la restitution finale.
+- Le graphe `RR bruts` affiche une ligne continue des RR bruts, avec mise en avant des seuls labels non `ok` et des labels 2 bis non `aucun`.
+- La post-classification 2 bis ne conserve plus que la passe A ; la passe B a ete retiree car elle reclassait a tort certains beats `court` en `ok`.
 
 ### Prochaine reprise conseillee
 
-- Verifier visuellement dans Streamlit le comportement de la multi-selection sur `Analyse RR`, notamment le changement d'activite, la seance active et les cas sans `activity_label`.
+- Verifier visuellement dans Streamlit le rendu du graphe `RR bruts` et confirmer s'il faut incrementer la version de l'algo clean apres le retrait de la passe B.
 
 ### Blocages / points a surveiller
 
 - Aucun blocage explicite documente dans ce fichier pour l'instant.
-- Le prochain travail devra preciser s'il concerne plutot le pipeline RR ou l'UX des pages activite.
-
-
+- Le retrait de la passe B modifie reellement la pipeline RR : il reste a decider s'il faut passer la version de l'algo en `+0.1` ou `+1`.
