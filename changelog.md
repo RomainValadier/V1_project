@@ -209,3 +209,16 @@ andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans
 - Retrait de la passe B de la post-classification 2 bis dans `polar_app/etape_2bis.py` ; la post-classification 2 bis ne conserve plus que la passe A.
 - Simplification de l'UI 2 bis dans `pages/2_Nettoyage_RR.py` : suppression des parametres `ratio_plancher` et `n_court_max`, et renommage du toggle pour n'activer que la passe A.
 - Nettoyage des metriques 2 bis de `pages/2_Nettoyage_RR.py` pour retirer l'indicateur de faux courts restaures lie a l'ancienne passe B.
+
+## 2026-04-11
+
+### Nettoyage RR
+
+- Ajout du module experimental `polar_app/iterative_lipponen.py` avec recalcul iteratif des zones denses, des dRR / mRR / QD / Th1 / Th2 sur points `ok` uniquement, accumulation des nouveaux artefacts par pass, et correction unique finale en reutilisant `analyze_rr_artifacts(..., labels_override=...)`.
+- Refactorisation minimale de `polar_app/rr_pipeline.py` : extraction d'un helper partage `_classify_lipponen_candidate(...)` pour reutiliser l'arbre de decision Lipponen sans reecrire la logique standard du pass 1.
+- Extension de `pages/2_Nettoyage_RR.py` avec un toggle sidebar `Nettoyage iteratif Lipponen`, les parametres `max_iter`, `dense_threshold`, `dense_window`, `qd_floor`, `k_drr_max`, `seuil_rendement`, et un ordre de calcul `standard -> iteratif -> passe A 2 bis`.
+- Enrichissement de la page `Nettoyage RR` avec les colonnes et diagnostics iteratifs (`label_iteratif`, `pass_detected`, `zone_dense_artefact`, `mrr_local`, `qd_drr_local`, `qd_mrr_local`, `th1_local`, `th2_local`, `drr_iter`, `drr_gap`, `suspect_zone_dense`, `correction_flag_final`, `rr_clean_ms`).
+- Ajout sur le graphe Altair `RR bruts` de marqueurs par pass iteratif (pass 2 a 5) avec tooltip dedie, plus un resume textuel des passes sous les graphes.
+- Projection explicite de `correction_flag_final` et `rr_clean_ms` sur l'analyse brute pour conserver une lecture beat-a-beat apres correction finale, y compris quand la passe A 2 bis est appliquee apres l'iteratif.
+- Verification effectuee : compilation Python reussie sur `polar_app/rr_pipeline.py`, `polar_app/iterative_lipponen.py` et `pages/2_Nettoyage_RR.py`.
+- Limite restante de validation locale : le Python systeme ne charge pas `numpy/pandas` et le `.venv` du depot reference un interpreteur `Python312` introuvable, donc le smoke test numerique complet n'a pas pu etre execute dans ce terminal.

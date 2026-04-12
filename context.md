@@ -12,7 +12,7 @@ Rappel :
 - `changelog.md` sert d'historique detaille
 - en fin de session, `context.md` doit etre mis a jour
 
-Derniere mise a jour : 2026-04-06
+Derniere mise a jour : 2026-04-11
 
 ## But du document
 
@@ -148,22 +148,25 @@ Au debut d'une nouvelle session :
 
 ### Objectif courant
 
-- Simplifier la post-classification 2 bis pour ne conserver que la passe A.
-- Etat : la passe B a ete retiree de `polar_app/etape_2bis.py` et l'UI de `pages/2_Nettoyage_RR.py` n'expose plus ses parametres ni ses metriques.
+- Ajouter un nettoyage iteratif Lipponen experimental apres le pass 1 v3, avec recalcul des zones denses, relabellisation iterative et correction unique finale.
+- Etat : `polar_app/iterative_lipponen.py` a ete ajoute, `polar_app/rr_pipeline.py` expose maintenant un helper partage pour la decision Lipponen, et `pages/2_Nettoyage_RR.py` propose un toggle sidebar `Nettoyage iteratif Lipponen` avec ses parametres, ses marqueurs Altair par pass et un resume des passes.
 
 ### Dernieres decisions actives
 
-- Pipeline RR versionnee en `3.1`.
+- Pipeline RR versionnee en `3.1` tant que la decision de bump de version n'a pas ete prise.
 - `Gestion activites` sert a l'edition.
 - `Visualisation activite` sert a la restitution finale.
-- Le graphe `RR bruts` affiche une ligne continue des RR bruts, avec mise en avant des seuls labels non `ok` et des labels 2 bis non `aucun`.
+- Le graphe `RR bruts` affiche une ligne continue des RR bruts, avec mise en avant des seuls labels non `ok`, des labels iteratifs par pass quand le mode iteratif est actif, et des labels 2 bis non `aucun`.
 - La post-classification 2 bis ne conserve plus que la passe A ; la passe B a ete retiree car elle reclassait a tort certains beats `court` en `ok`.
+- L'ordre experimental de calcul sur la page `Nettoyage RR` est maintenant : pass 1 standard -> iteration Lipponen -> passe A 2 bis.
 
 ### Prochaine reprise conseillee
 
-- Verifier visuellement dans Streamlit le rendu du graphe `RR bruts` et confirmer s'il faut incrementer la version de l'algo clean apres le retrait de la passe B.
+- Verifier visuellement dans Streamlit le mode iteratif sur une seance reelle, en particulier la bosse autour de `49.3-49.6 min`, les marqueurs par pass, le resume des passes et la coexistence avec la passe A 2 bis.
+- Decider si l'ajout de l'iteratif et le retrait precedent de la passe B doivent faire passer la version de l'algo clean de `3.1` a `+0.1` ou `+1`.
 
 ### Blocages / points a surveiller
 
-- Aucun blocage explicite documente dans ce fichier pour l'instant.
-- Le retrait de la passe B modifie reellement la pipeline RR : il reste a decider s'il faut passer la version de l'algo en `+0.1` ou `+1`.
+- Le Python systeme disponible dans le terminal ne charge pas `numpy/pandas`; la verification locale a pu etre faite en compilation uniquement, pas en smoke test complet avec execution numerique.
+- Le `.venv` present dans le depot pointe vers un interpreteur externe devenu invalide (`Python312`), donc il faut soit recreer le venv soit tester directement via l'environnement de dev habituel avant validation finale.
+- L'ajout de l'iteratif et le retrait precedent de la passe B modifient reellement la pipeline RR : il reste a decider s'il faut passer la version de l'algo en `+0.1` ou `+1`.

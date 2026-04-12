@@ -231,6 +231,27 @@ def _extreme(values: list[float], mode: str) -> float:
         return np.nan
     return max(valid) if mode == "max" else min(valid)
 
+def _classify_lipponen_candidate(
+    rr_value: float,
+    med_value: float,
+    th2_value: float,
+    s21_value: float,
+    s22_value: float,
+    mrr_norm_value: float,
+    threshold_mrr: float,
+    next_rr_value: float = np.nan,
+) -> str:
+    condition_long = s21_value > 1.0 and not np.isnan(s22_value) and s22_value < -1.0
+    condition_court = s21_value < -1.0 and not np.isnan(s22_value) and s22_value > 1.0
+    condition_mrr = abs(mrr_norm_value) > threshold_mrr
+    if not (condition_long or condition_court or condition_mrr):
+        return LABEL_OK
+    if abs((rr_value / 2.0) - med_value) < th2_value:
+        return LABEL_MANQUE
+    if np.isfinite(next_rr_value) and abs((rr_value + next_rr_value) - med_value) < th2_value:
+        return LABEL_FAUX_BATTEMENT
+    return LABEL_LONG if rr_value > med_value else LABEL_COURT
+
 def _gap_duration_ms(frame: pd.DataFrame, step_ms: np.ndarray, start: int, end: int) -> float:
     if "timestamp" in frame.columns:
         ts = pd.to_datetime(frame["timestamp"], errors="coerce")
@@ -343,19 +364,19 @@ def _classify_labels(analysis: pd.DataFrame, params: RRCleaningParams, progress_
             if abs(drr_norm[pos]) <= params.threshold_drr and abs(mrr_norm[pos]) <= params.threshold_mrr:
                 labels[raw_idx] = LABEL_OK
                 continue
-            condition_long = s21[pos] > 1.0 and not np.isnan(s22[pos]) and s22[pos] < -1.0
-            condition_court = s21[pos] < -1.0 and not np.isnan(s22[pos]) and s22[pos] > 1.0
-            condition_mrr = abs(mrr_norm[pos]) > params.threshold_mrr
-            if condition_long or condition_court or condition_mrr:
-                med = med_local[pos]
-                if abs((rr[raw_idx] / 2.0) - med) < th2[pos]:
-                    labels[raw_idx] = LABEL_MANQUE
-                elif raw_idx + 1 < len(out) and labels[raw_idx + 1] != LABEL_GAP_DECO and abs((rr[raw_idx] + rr[raw_idx + 1]) - med) < th2[pos]:
-                    labels[raw_idx] = LABEL_FAUX_BATTEMENT
-                else:
-                    labels[raw_idx] = LABEL_LONG if rr[raw_idx] > med else LABEL_COURT
-            else:
-                labels[raw_idx] = LABEL_OK
+            next_rr_value = np.nan
+            if raw_idx + 1 < len(out) and labels[raw_idx + 1] != LABEL_GAP_DECO:
+                next_rr_value = rr[raw_idx + 1]
+            labels[raw_idx] = _classify_lipponen_candidate(
+                rr_value=rr[raw_idx],
+                med_value=med_local[pos],
+                th2_value=th2[pos],
+                s21_value=s21[pos],
+                s22_value=s22[pos],
+                mrr_norm_value=mrr_norm[pos],
+                threshold_mrr=params.threshold_mrr,
+                next_rr_value=next_rr_value,
+            )
             if progress_idx % chunk == 0 or progress_idx == len(valid_indices):
                 _emit_stage_progress(progress_callback, progress_start, progress_end, progress_idx, len(valid_indices))
     _emit_progress(progress_callback, progress_end)
@@ -894,3 +915,5 @@ def analyze_rr_artifacts(frame: pd.DataFrame, params: RRCleaningParams | None = 
         global_non_ok_rate=global_non_ok_rate,
         global_quality_label=global_quality_label,
     )
+
+

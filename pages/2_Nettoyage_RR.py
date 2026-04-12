@@ -14,6 +14,7 @@ from polar_app.etape_2bis import (
     LABEL_2BIS_NONE,
     run_etape_2bis,
 )
+from polar_app.iterative_lipponen import PASS_MARKERS, iterative_reclassification
 from polar_app.repository import ProcessedSessionRepository
 from polar_app.rr_pipeline import (
     CORRECTION_FLAG_ORDER,
@@ -38,6 +39,14 @@ DEFAULT_2BIS_PARAMS = {
     "k_ref": 15,
     "n_ok_max": 8,
 }
+DEFAULT_ITERATIVE_PARAMS = {
+    "max_iter": 3,
+    "dense_threshold": 0.15,
+    "dense_window": 121,
+    "qd_floor": 5.0,
+    "k_drr_max": 5,
+    "seuil_rendement": 3,
+}
 RAW_LABEL_COLORS = {
     LABEL_OK: "#64748b",
     LABEL_GAP_DECO: "#cbd5e1",
@@ -55,6 +64,22 @@ LABEL_2BIS_SHAPES = {
 NON_OK_LABEL_ORDER = [label for label in LABEL_ORDER if label != LABEL_OK]
 RAW_2BIS_COLOR_SCALE = alt.Scale(domain=[LABEL_2BIS_A, LABEL_2BIS_B], range=["#8b5cf6", "#f472b6"])
 RAW_2BIS_SHAPE_SCALE = alt.Scale(domain=[LABEL_2BIS_A, LABEL_2BIS_B], range=["diamond", "triangle-up"])
+ITERATIVE_ANALYSIS_COLUMNS = [
+    "label_iteratif",
+    "pass_detected",
+    "zone_dense_artefact",
+    "mrr_local",
+    "qd_drr_local",
+    "qd_mrr_local",
+    "th1_local",
+    "th2_local",
+    "drr_iter",
+    "drr_gap",
+    "suspect_zone_dense",
+]
+ITERATIVE_PASS_DOMAIN = [f"Pass {pass_number}" for pass_number in sorted(PASS_MARKERS.keys())]
+ITERATIVE_PASS_COLORS = [PASS_MARKERS[pass_number][0] for pass_number in sorted(PASS_MARKERS.keys())]
+ITERATIVE_PASS_SHAPES = [PASS_MARKERS[pass_number][1] for pass_number in sorted(PASS_MARKERS.keys())]
 
 
 def inject_styles() -> None:
@@ -132,6 +157,122 @@ def build_2bis_inputs() -> tuple[bool, dict[str, float | int]]:
     }
 
 
+def build_iterative_inputs() -> tuple[bool, dict[str, float | int]]:
+    activer_iteratif = st.sidebar.toggle(
+        "?? Nettoyage it?ratif Lipponen",
+        value=False,
+        help="Recalcule les seuils Lipponen dans les zones denses en artefacts avant une correction unique finale.",
+    )
+    with st.sidebar.expander("?? Param?tres it?ration", expanded=False):
+        max_iter = st.slider("Nombre max d'it?rations", 2, 5, int(DEFAULT_ITERATIVE_PARAMS["max_iter"]))
+        dense_threshold = st.slider("Seuil zone dense (%)", 5, 30, int(DEFAULT_ITERATIVE_PARAMS["dense_threshold"] * 100), step=1) / 100.0
+        dense_window = st.slider("Fen?tre zone dense (battements)", 91, 181, int(DEFAULT_ITERATIVE_PARAMS["dense_window"]), step=10)
+        qd_floor = st.number_input("Plancher QD (ms)", min_value=1.0, max_value=20.0, value=float(DEFAULT_ITERATIVE_PARAMS["qd_floor"]), step=0.5, format="%.1f")
+        k_drr_max = st.slider("K_DRR_MAX (distance max pr?d?cesseur ok)", 3, 10, int(DEFAULT_ITERATIVE_PARAMS["k_drr_max"]))
+        seuil_rendement = st.slider("Seuil rendement d?croissant", 1, 10, int(DEFAULT_ITERATIVE_PARAMS["seuil_rendement"]))
+    return activer_iteratif, {
+        "max_iter": int(max_iter),
+        "dense_threshold": float(dense_threshold),
+        "dense_window": int(dense_window),
+        "qd_floor": float(qd_floor),
+        "k_drr_max": int(k_drr_max),
+        "seuil_rendement": int(seuil_rendement),
+    }
+
+
+def _map_rr_clean_from_cleaned(cleaned_frame: pd.DataFrame, n_points: int) -> np.ndarray:
+    rr_clean = np.full(n_points, np.nan)
+    if cleaned_frame.empty:
+        return rr_clean
+    grouped = cleaned_frame.groupby(["source_index_start", "source_index_end"], sort=False, dropna=False)
+    for (start, end), group in grouped:
+        if pd.isna(start) or pd.isna(end):
+            continue
+        start_i = int(start)
+        end_i = int(end)
+        values = group["rr_interval_ms"].astype(float).to_numpy()
+        if start_i == end_i:
+            rr_clean[start_i] = float(values[0]) if len(values) else np.nan
+            continue
+        targets = np.arange(start_i, end_i + 1, dtype=float)
+        if len(values) == len(targets):
+            rr_clean[start_i : end_i + 1] = values
+            continue
+        source_positions = np.linspace(float(start_i), float(end_i), num=max(len(values), 1))
+        rr_clean[start_i : end_i + 1] = np.interp(targets, source_positions, values) if len(values) else np.nan
+    return rr_clean
+
+
+def _map_clean_text_from_cleaned(cleaned_frame: pd.DataFrame, n_points: int, column: str, default: str) -> pd.Series:
+    mapped = np.full(n_points, default, dtype=object)
+    if cleaned_frame.empty or column not in cleaned_frame.columns:
+        return pd.Series(mapped)
+    grouped = cleaned_frame.groupby(["source_index_start", "source_index_end"], sort=False, dropna=False)
+    for (start, end), group in grouped:
+        if pd.isna(start) or pd.isna(end):
+            continue
+        start_i = int(start)
+        end_i = int(end)
+        value = str(group.iloc[0][column]) if pd.notna(group.iloc[0][column]) else default
+        mapped[start_i : end_i + 1] = value
+    return pd.Series(mapped)
+
+
+def _aggregate_iterative_label(values: list[str]) -> str:
+    non_default = [value for value in values if value and value != "aucun"]
+    if not non_default:
+        return "aucun"
+    unique = list(dict.fromkeys(non_default))
+    return unique[0] if len(unique) == 1 else "mixte"
+
+
+def attach_iterative_overlay(result, iterative_result):
+    analysis = result.analysis_frame.copy()
+    iterative_analysis = iterative_result.result.analysis_frame.copy()
+    for column in ITERATIVE_ANALYSIS_COLUMNS:
+        if column in iterative_analysis.columns:
+            analysis[column] = iterative_analysis[column].values
+    analysis["correction_flag_final"] = _map_clean_text_from_cleaned(result.cleaned_frame, len(analysis), "correction_flag", "ok").astype(str)
+    analysis["rr_clean_ms"] = _map_rr_clean_from_cleaned(result.cleaned_frame, len(analysis))
+    result.analysis_frame = analysis
+
+    cleaned = result.cleaned_frame.copy()
+    if cleaned.empty:
+        result.cleaned_frame = cleaned
+        return result
+
+    def aggregate_label(row):
+        start = int(row["source_index_start"]) if pd.notna(row.get("source_index_start")) else None
+        end = int(row["source_index_end"]) if pd.notna(row.get("source_index_end")) else None
+        if start is None or end is None:
+            return "aucun"
+        values = analysis.loc[start:end, "label_iteratif"].fillna("aucun").astype(str).tolist() if "label_iteratif" in analysis.columns else ["aucun"]
+        return _aggregate_iterative_label(values)
+
+    def aggregate_max(row, column: str, default: int = 0) -> int:
+        start = int(row["source_index_start"]) if pd.notna(row.get("source_index_start")) else None
+        end = int(row["source_index_end"]) if pd.notna(row.get("source_index_end")) else None
+        if start is None or end is None or column not in analysis.columns:
+            return default
+        return int(pd.to_numeric(analysis.loc[start:end, column], errors="coerce").fillna(default).max())
+
+    def aggregate_any(row, column: str) -> bool:
+        start = int(row["source_index_start"]) if pd.notna(row.get("source_index_start")) else None
+        end = int(row["source_index_end"]) if pd.notna(row.get("source_index_end")) else None
+        if start is None or end is None or column not in analysis.columns:
+            return False
+        return bool(analysis.loc[start:end, column].fillna(False).astype(bool).any())
+
+    cleaned["label_iteratif"] = cleaned.apply(aggregate_label, axis=1)
+    cleaned["pass_detected"] = cleaned.apply(lambda row: aggregate_max(row, "pass_detected", 0), axis=1)
+    cleaned["zone_dense_artefact"] = cleaned.apply(lambda row: aggregate_any(row, "zone_dense_artefact"), axis=1)
+    cleaned["suspect_zone_dense"] = cleaned.apply(lambda row: aggregate_any(row, "suspect_zone_dense"), axis=1)
+    cleaned["correction_flag_final"] = cleaned["correction_flag"].astype(str)
+    cleaned["rr_clean_ms"] = cleaned["rr_interval_ms"].astype(float)
+    result.cleaned_frame = cleaned
+    return result
+
+
 def attach_label_2bis(result, label_2bis_values: list[str] | None = None):
     analysis = result.analysis_frame.copy()
     if label_2bis_values is None:
@@ -203,7 +344,24 @@ def build_raw_chart(frame: pd.DataFrame, rr_display_cap_ms: float) -> pd.DataFra
     chart["t_min"] = chart["t_offset_ms"] / 60000.0
     positive_rr = chart["rr_interval_ms"].where(chart["rr_interval_ms"] > 0, np.nan)
     chart["rr_plot_ms"] = positive_rr.clip(upper=rr_display_cap_ms)
-    chart["label_2bis"] = chart.get("label_2bis", LABEL_2BIS_NONE)
+
+    def series_or_default(column: str, default):
+        if column in chart.columns:
+            return chart[column]
+        return pd.Series(default, index=chart.index)
+
+    chart["label_2bis"] = series_or_default("label_2bis", LABEL_2BIS_NONE)
+    chart["label_iteratif"] = series_or_default("label_iteratif", "aucun")
+    chart["pass_detected"] = pd.to_numeric(series_or_default("pass_detected", 0), errors="coerce").fillna(0).astype(int)
+    chart["zone_dense_artefact"] = series_or_default("zone_dense_artefact", False).fillna(False).astype(bool)
+    chart["mrr_local"] = pd.to_numeric(series_or_default("mrr_local", np.nan), errors="coerce")
+    chart["qd_drr_local"] = pd.to_numeric(series_or_default("qd_drr_local", np.nan), errors="coerce")
+    chart["qd_mrr_local"] = pd.to_numeric(series_or_default("qd_mrr_local", np.nan), errors="coerce")
+    chart["th1_local"] = pd.to_numeric(series_or_default("th1_local", np.nan), errors="coerce")
+    chart["th2_local"] = pd.to_numeric(series_or_default("th2_local", np.nan), errors="coerce")
+    chart["drr_iter"] = pd.to_numeric(series_or_default("drr_iter", np.nan), errors="coerce")
+    chart["drr_gap"] = pd.to_numeric(series_or_default("drr_gap", np.nan), errors="coerce")
+    chart["rr_clean_ms"] = pd.to_numeric(series_or_default("rr_clean_ms", np.nan), errors="coerce")
     return chart.loc[chart["rr_plot_ms"].notna()].copy()
 
 def build_clean_chart(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -336,6 +494,7 @@ def main() -> None:
         selected_label = st.selectbox("Session", list(session_options.keys()), index=len(session_options) - 1)
         show_full_tables = st.toggle("Afficher les tables complètes", value=False)
 
+    activer_iteratif, iterative_params = build_iterative_inputs()
     params = build_parameter_inputs(RRCleaningParams())
     activer_2bis, params_2bis = build_2bis_inputs()
     session, rr_frame, _ = repository.load_session_data(session_options[selected_label])
@@ -344,26 +503,68 @@ def main() -> None:
     progress_state = {"value": 0.0}
     update_progress = build_progress_updater(progress_bar, progress_state)
 
+    iterative_result = None
+    result_standard = None
+    result_pre_2bis = None
     try:
+        result_standard = attach_label_2bis(
+            analyze_rr_artifacts(
+                rr_frame,
+                params,
+                progress_callback=remap_progress(update_progress, 0.00, 0.35 if activer_iteratif else (0.45 if activer_2bis else 1.00)),
+            )
+        )
+        result_pre_2bis = result_standard
+        update_progress(0.35 if activer_iteratif else (0.45 if activer_2bis else 1.00))
+
+        if activer_iteratif:
+            iterative_result = iterative_reclassification(
+                result_standard.analysis_frame,
+                max_iter=int(iterative_params["max_iter"]),
+                dense_threshold=float(iterative_params["dense_threshold"]),
+                dense_window=int(iterative_params["dense_window"]),
+                qd_floor=float(iterative_params["qd_floor"]),
+                k_drr_max=int(iterative_params["k_drr_max"]),
+                seuil_rendement=int(iterative_params["seuil_rendement"]),
+                alpha=float(params.alpha),
+                params=params,
+                progress_callback=remap_progress(update_progress, 0.35, 0.75 if activer_2bis else 1.00),
+            )
+            result_pre_2bis = attach_label_2bis(iterative_result.result)
+
         if activer_2bis:
-            result_base = attach_label_2bis(analyze_rr_artifacts(rr_frame, params, progress_callback=remap_progress(update_progress, 0.00, 0.45)))
             rr_brut = rr_frame["rr_interval_ms"].astype("float64").to_numpy()
-            labels_lipponen = result_base.analysis_frame["label"].astype(str).tolist()
-            update_progress(0.50)
+            labels_lipponen = result_pre_2bis.analysis_frame["label"].astype(str).tolist()
+            update_progress(0.80)
             labels_modifies, label_2bis_col = run_etape_2bis(rr_brut, labels_lipponen, params=params_2bis)
-            update_progress(0.55)
-            result = attach_label_2bis(analyze_rr_artifacts(rr_frame, params, labels_override=labels_modifies, progress_callback=remap_progress(update_progress, 0.55, 1.00)), label_2bis_col)
+            update_progress(0.85)
+            result = attach_label_2bis(
+                analyze_rr_artifacts(
+                    rr_frame,
+                    params,
+                    labels_override=labels_modifies,
+                    progress_callback=remap_progress(update_progress, 0.85, 1.00),
+                ),
+                label_2bis_col,
+            )
+            if iterative_result is not None:
+                result = attach_iterative_overlay(result, iterative_result)
             clean_paths = None
         else:
-            result = attach_label_2bis(analyze_rr_artifacts(rr_frame, params, progress_callback=update_progress))
-            clean_paths = export_clean_result(repository, session, result, params)
+            result = result_pre_2bis
+            clean_paths = None if activer_iteratif else export_clean_result(repository, session, result, params)
         update_progress(1.0)
     except Exception:
         progress_bar.empty()
         raise
 
     if clean_paths is None:
-        st.caption("Mode 2 bis actif : aucun export clean persistant n'est ecrit.")
+        if activer_iteratif and activer_2bis:
+            st.caption("Modes it?ratif et 2 bis actifs : aucun export clean persistant n'est ecrit.")
+        elif activer_iteratif:
+            st.caption("Mode it?ratif actif : aucun export clean persistant n'est ecrit.")
+        else:
+            st.caption("Mode 2 bis actif : aucun export clean persistant n'est ecrit.")
     else:
         st.caption(f"Export clean automatique : {clean_paths['rr_clean_relative']} | {clean_paths['fc_clean_relative']}")
 
@@ -390,6 +591,13 @@ def main() -> None:
         metrics_2bis = st.columns(2)
         metrics_2bis[0].metric("Artefacts suppl?mentaires (passe A)", str(n_long_A))
         metrics_2bis[1].metric("Beats modifi?s au total", str(n_total))
+
+    if activer_iteratif and iterative_result is not None:
+        iterative_metrics = st.columns(4)
+        iterative_metrics[0].metric("Artefacts pass 1", str(iterative_result.base_artifacts))
+        iterative_metrics[1].metric("Nouveaux artefacts it?ratifs", str(sum(item.new_artifacts for item in iterative_result.pass_summaries)))
+        iterative_metrics[2].metric("Zones denses (dernier pass)", str(iterative_result.dense_points_last))
+        iterative_metrics[3].metric("Points suspects", str(iterative_result.suspect_points_last))
 
     counts_col1, counts_col2, counts_col3, counts_col4, counts_col5 = st.columns(5)
     with counts_col1:
@@ -433,10 +641,13 @@ def main() -> None:
     raw_points = build_raw_chart(result.analysis_frame, raw_display_cap_ms)
     clean_line, clean_corrected, clean_excluded = build_clean_chart(result.cleaned_frame)
     dense_boxes = build_dense_boxes(result.cleaned_frame, result.dense_regions_frame)
-    base_clean_line, _, _ = build_clean_chart(result_base.cleaned_frame) if activer_2bis else (pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
+    base_clean_line, _, _ = build_clean_chart(result_pre_2bis.cleaned_frame) if activer_2bis and result_pre_2bis is not None else (pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
 
     raw_label_points = raw_points.loc[raw_points["label"].ne(LABEL_OK)].copy()
     raw_2bis_points = raw_points.loc[raw_points["label_2bis"].ne(LABEL_2BIS_NONE)].copy() if activer_2bis else pd.DataFrame()
+    raw_iter_points = raw_points.loc[raw_points["pass_detected"].ge(2) & raw_points["label_iteratif"].ne("aucun")].copy() if activer_iteratif else pd.DataFrame()
+    if not raw_iter_points.empty:
+        raw_iter_points["pass_label"] = raw_iter_points["pass_detected"].map(lambda value: f"Pass {int(value)}")
 
     raw_line_chart = alt.Chart(raw_points).mark_line(
         color="#9ca3af",
@@ -463,6 +674,32 @@ def main() -> None:
             tooltip=["t_min:Q", "rr_interval_ms:Q", "label:N", "label_2bis:N", "run_flag:N", "run_series_flag:N", "deco_flag:N"],
         )
         raw_chart = raw_chart + raw_label_chart
+    if activer_iteratif and not raw_iter_points.empty:
+        raw_iter_chart = alt.Chart(raw_iter_points).mark_point(
+            filled=True,
+            size=220,
+            stroke="#ffffff",
+            strokeWidth=1.1,
+            opacity=0.96,
+        ).encode(
+            x="t_min:Q",
+            y="rr_plot_ms:Q",
+            color=alt.Color("pass_label:N", scale=alt.Scale(domain=ITERATIVE_PASS_DOMAIN, range=ITERATIVE_PASS_COLORS), title="Pass it?ratif"),
+            shape=alt.Shape("pass_label:N", scale=alt.Scale(domain=ITERATIVE_PASS_DOMAIN, range=ITERATIVE_PASS_SHAPES), title="Pass it?ratif"),
+            tooltip=[
+                alt.Tooltip("t_min:Q", title="Temps (min)", format=".3f"),
+                alt.Tooltip("rr_interval_ms:Q", title="RR original (ms)", format=".1f"),
+                alt.Tooltip("label_iteratif:N", title="label"),
+                alt.Tooltip("pass_detected:Q", title="pass_detected"),
+                alt.Tooltip("drr_iter:Q", title="dRR_iter", format=".2f"),
+                alt.Tooltip("drr_gap:Q", title="dRR_gap", format=".0f"),
+                alt.Tooltip("mrr_local:Q", title="mRR_local", format=".2f"),
+                alt.Tooltip("th1_local:Q", title="Th1_local", format=".2f"),
+                alt.Tooltip("th2_local:Q", title="Th2_local", format=".2f"),
+                alt.Tooltip("rr_clean_ms:Q", title="rr_corrig?", format=".2f"),
+            ],
+        )
+        raw_chart = raw_chart + raw_iter_chart
     if activer_2bis and not raw_2bis_points.empty:
         raw_2bis_chart = alt.Chart(raw_2bis_points).mark_point(
             filled=True,
@@ -538,7 +775,11 @@ def main() -> None:
     with chart_col1:
         render_section_label("RR bruts")
         st.altair_chart(raw_chart.properties(height=320).interactive(), use_container_width=True)
-        if activer_2bis:
+        if activer_iteratif and activer_2bis:
+            st.caption("La ligne relie tous les RR bruts. Les labels non ok restent mis en avant, les passes it?ratives apparaissent avec un marqueur d?di? par pass, et les marqueurs 2 bis ne s'affichent que pour label_2bis non aucun.")
+        elif activer_iteratif:
+            st.caption("La ligne relie tous les RR bruts. Les labels non ok restent mis en avant et les nouveaux artefacts it?ratifs sont superpos?s avec un marqueur d?di? par pass.")
+        elif activer_2bis:
             st.caption("La ligne relie tous les RR bruts. Seuls les points avec label non ok sont mis en avant, et seuls les points avec label_2bis non aucun recoivent un marqueur 2 bis.")
         else:
             st.caption("La ligne relie tous les RR bruts. Seuls les points avec label non ok sont mis en avant.")
@@ -547,12 +788,27 @@ def main() -> None:
         st.altair_chart(clean_chart.properties(height=320).interactive(), use_container_width=True)
         st.caption("Les zones denses run_serie sont encadr?es en vert d'eau. Les points nettoy?s visibles utilisent une couleur et une forme distinctes selon la m?thode de correction. Quand l'?tape 2 bis est active, la courbe grise en tirets montre le RR clean pr?-2 bis et la courbe verte le RR clean post-2 bis.")
 
-
+    if activer_iteratif and iterative_result is not None:
+        pass_lines = "\n".join(
+            f"- Pass {item.pass_number} : {item.new_artifacts} nouveaux artefacts | zones denses : {item.dense_points} points ({item.dense_pct:.1f}%) | suspects : {item.suspect_points}" + (f" | arr?t : {item.stop_reason}" if item.stop_reason else "")
+            for item in iterative_result.pass_summaries
+        )
+        st.markdown(
+            f"""
+**R?sultat it?ration** :
+- Pass 1 : {iterative_result.base_artifacts} artefacts d?tect?s
+{pass_lines}
+- Convergence atteinte au pass {iterative_result.final_pass} ({iterative_result.stop_reason})
+- Zones denses (derni?re ?valuation) : {iterative_result.dense_points_last} battements ({iterative_result.dense_pct_last:.1f}%)
+- Points suspects non classifi?s : {iterative_result.suspect_points_last}
+"""
+        )
 
     render_section_label("Variables interm?diaires")
     variable_columns = [
-        "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label_initial", "label", "label_2bis", "run_flag", "run_series_flag",
+        "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label_initial", "label", "label_2bis", "label_iteratif", "pass_detected", "run_flag", "run_series_flag",
         "dRR_ms", "Th1_ms", "dRR_norm", "med_locale_ms", "mRR_brut_ms", "mRR_ms", "Th2_ms", "mRR_norm", "S21", "S22",
+        "mrr_local", "qd_drr_local", "qd_mrr_local", "th1_local", "th2_local", "drr_iter", "drr_gap", "zone_dense_artefact", "suspect_zone_dense", "correction_flag_final", "rr_clean_ms",
         "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw",
     ]
     available = [column for column in variable_columns if column in result.analysis_frame.columns]
@@ -561,17 +817,32 @@ def main() -> None:
     table_col1, table_col2 = st.columns(2)
     with table_col1:
         render_section_label("Table RR bruts")
-        raw_columns = ["t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label", "label_2bis", "run_flag", "run_series_flag", "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id", "correction_flag_raw"]
-        raw_table = result.analysis_frame[raw_columns]
+        raw_columns = [
+            "t_offset_ms", "rr_interval_ms", "source_pipeline_flag", "deco_flag", "label", "label_2bis", "label_iteratif", "pass_detected",
+            "run_flag", "run_series_flag", "initial_segment_id", "initial_segment_status", "segment_final_id", "dense_region_id",
+            "mrr_local", "qd_drr_local", "qd_mrr_local", "th1_local", "th2_local", "drr_iter", "drr_gap",
+            "zone_dense_artefact", "suspect_zone_dense", "correction_flag_raw", "correction_flag_final", "rr_clean_ms",
+        ]
+        raw_available = [column for column in raw_columns if column in result.analysis_frame.columns]
+        raw_table = result.analysis_frame[raw_available]
         st.dataframe(raw_table, use_container_width=True, height=340)
     with table_col2:
         render_section_label("Table RR clean")
         clean_table_source = result.cleaned_frame.assign(
             point_nettoye=result.cleaned_frame["correction_flag"].isin(["division", "fusion", "interpolation_pchip", "interpolation_lineaire"]),
-            zone_dense_artefact=result.cleaned_frame["dense_region_id"].fillna(0).gt(0),
+            zone_dense_artefact=result.cleaned_frame.get("zone_dense_artefact", result.cleaned_frame["dense_region_id"].fillna(0).gt(0)),
+            suspect_zone_dense=result.cleaned_frame.get("suspect_zone_dense", False),
+            correction_flag_final=result.cleaned_frame.get("correction_flag_final", result.cleaned_frame["correction_flag"].astype(str)),
+            rr_clean_ms=pd.to_numeric(result.cleaned_frame.get("rr_clean_ms", result.cleaned_frame["rr_interval_ms"]), errors="coerce"),
         )
-        clean_columns = ["cleaned_index", "rr_interval_ms", "label", "label_2bis", "run_flag", "run_series_flag", "deco_flag", "correction_flag", "point_nettoye", "zone_dense_artefact", "fc_ok", "hrr_ok", "rmssd_ok", "segment_status", "quality_segment_label", "dense_region_id", "source_reference"]
-        cleaned_table = clean_table_source[clean_columns] if show_full_tables else clean_table_source[clean_columns].head(700)
+        clean_columns = [
+            "cleaned_index", "rr_interval_ms", "rr_clean_ms", "label", "label_2bis", "label_iteratif", "pass_detected",
+            "run_flag", "run_series_flag", "deco_flag", "correction_flag", "correction_flag_final", "point_nettoye",
+            "zone_dense_artefact", "suspect_zone_dense", "fc_ok", "hrr_ok", "rmssd_ok", "segment_status",
+            "quality_segment_label", "dense_region_id", "source_reference",
+        ]
+        clean_available = [column for column in clean_columns if column in clean_table_source.columns]
+        cleaned_table = clean_table_source[clean_available] if show_full_tables else clean_table_source[clean_available].head(700)
         st.dataframe(cleaned_table, use_container_width=True, height=340)
 
 
