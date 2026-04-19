@@ -2,6 +2,18 @@
 
 Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
+## 2026-04-18
+
+### Pipeline RR / exploitabilite
+
+- Bascule de la regle metier des zones de chauffe post-reconnexion dans `polar_app/rr_pipeline.py` : elles ne sont plus conservees dans le `RR clean` visible et sont maintenant exportees comme zones exclues.
+- Les beats etiquetes `post_reconnect_deco` et `post_reconnect_artefact` ne comptent desormais plus dans les indicateurs d'exploitabilite (`fc_ok`, `hrr_ok`, `rmssd_ok`) ; la FC clean et le RMSSD ne les utilisent donc plus dans leurs calculs.
+- Mise a jour de la qualite globale du pipeline pour compter aussi les zones de chauffe comme non-ok.
+- Incrementation de la version d'algo clean de `3.1` a `3.2` dans `polar_app/clean_export.py`, ce qui force la recompilation des exports clean devenus obsoletes.
+- Ajustement de `pages/4_Analyse_RR.py` pour compter aussi les zones de chauffe post-artefact dans les `RR non viables`.
+- Precision metier appliquee ensuite : seule la chauffe apres vraie deconnexion (`post_reconnect_deco`) reste exclue ; la chauffe apres cassure sur serie d'artefacts (`post_reconnect_artefact`) redevient visible dans `RR clean` et reste exploitable pour la FC, mais pas pour le RMSSD.
+- Bump explicite de la version d'algo clean de `3.2` a `3.3` pour figer cette regle metier corrigee et forcer la recompilation des exports clean.
+
 ## 2026-04-06
 
 ### Page `Bilan Qualite RR`
@@ -222,3 +234,26 @@ andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans
 - Projection explicite de `correction_flag_final` et `rr_clean_ms` sur l'analyse brute pour conserver une lecture beat-a-beat apres correction finale, y compris quand la passe A 2 bis est appliquee apres l'iteratif.
 - Verification effectuee : compilation Python reussie sur `polar_app/rr_pipeline.py`, `polar_app/iterative_lipponen.py` et `pages/2_Nettoyage_RR.py`.
 - Limite restante de validation locale : le Python systeme ne charge pas `numpy/pandas` et le `.venv` du depot reference un interpreteur `Python312` introuvable, donc le smoke test numerique complet n'a pas pu etre execute dans ce terminal.
+
+## 2026-04-14
+
+### Nettoyage RR
+
+- Ajout d'une persistance de flags manuels beat-a-beat dans `session_meta.json` via le nouveau champ `rr_manual_annotations`, avec migration retrocompatible dans `polar_app/models.py`.
+- Extension de `polar_app/repository.py` avec les helpers `get_rr_manual_annotations(...)`, `save_rr_manual_annotations(...)`, `toggle_rr_manual_annotation(...)` et `clear_rr_manual_annotations(...)` pour gerer les annotations manuelles RR par seance.
+- Ajout du composant front local `frontend/rr_manual_editor/` et de son wrapper `polar_app/rr_manual_component.py` pour afficher un graphe RR brut interactif cliquable directement depuis Streamlit.
+- Remplacement sur `pages/2_Nettoyage_RR.py` du rendu passif `RR bruts` par le composant interactif : ligne continue des RR, marqueurs labels non `ok`, overlays iteratifs et 2 bis conserves, et clic toggle sur chaque beat pour ajouter / retirer le flag `manuel`.
+- Ajout sur `pages/2_Nettoyage_RR.py` d'une surcouche metier `manuel` avec colonnes `label_auto`, `manual_flag`, `manual_treated_as`, `is_manual_annotation` ; les beats marques `manuel` sont affiches comme tels dans l'analyse mais convertis en `long` uniquement lors de la relance de correction via `labels_override`.
+- Ajout d'un tableau dedie `Points annotes manuellement` avec synthese du nombre de points, des labels auto distincts, de la plage temporelle et des variables de classification utiles (`dRR_ms`, `Th1_ms`, `mRR_ms`, `Th2_ms`, `S21`, `S22`, `rr_clean_ms`, etc.).
+- Ajustement du comportement d'export sur la page `Nettoyage RR` : aucun export clean persistant n'est ecrit tant qu'au moins un flag manuel est actif sur la seance.
+- Verification effectuee : compilation Python reussie sur `polar_app/models.py`, `polar_app/repository.py`, `polar_app/rr_manual_component.py` et `pages/2_Nettoyage_RR.py`.
+- Limites restantes : pas de smoke test Streamlit complet dans ce terminal ; `git status` est actuellement bloque par un `safe.directory` manquant sur le depot local.
+
+- Evolution du composant `frontend/rr_manual_editor/` : le clic sur `RR bruts` n'ecrit plus immediatement, il alimente une selection locale en attente avec validation explicite du lot, annulation locale et action d'effacement global des flags manuels.
+- Extension de `polar_app/repository.py` avec `apply_rr_manual_annotation_batch(...)` pour appliquer un toggle persistant sur un ensemble d'indices RR en une seule validation.
+- Ajout d'un cache local du bloc automatique `standard -> iteratif -> 2 bis` dans `st.session_state` sur `pages/2_Nettoyage_RR.py`, afin de reutiliser les resultats amont inchanges lors des validations manuelles et d'accelerer nettement le rafraichissement.
+- Ajout du nouveau composant local `frontend/rr_clean_viewer/` avec wrapper `polar_app/rr_clean_component.py` ; `RR clean` passe maintenant par ce viewer Plotly avec pan, scroll zoom, reset double-clic et bouton plein ecran.
+- Remplacement du rendu Altair principal de `RR clean` dans `pages/2_Nettoyage_RR.py` par le composant Plotly local, en conservant la ligne clean, les points corriges, les points exclus, les zones denses et la courbe pre-2 bis quand elle existe.
+- Verification effectuee : compilation Python reussie sur `polar_app/repository.py`, `polar_app/rr_manual_component.py`, `polar_app/rr_clean_component.py` et `pages/2_Nettoyage_RR.py`.
+- Correctif de serialization des payloads front : les valeurs `NaN` / non finies sont maintenant converties en `null` avant envoi vers les composants `RR bruts` et `RR clean`, pour eviter les erreurs JSON de type `Unexpected token 'N'`.
+- Correctif UX sur `frontend/rr_manual_editor/` : ajout d'un vrai bouton `Plein ecran` sur `RR bruts`, avec gestion du resize Plotly lors de l'entree / sortie du mode plein ecran.

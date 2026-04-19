@@ -14,7 +14,7 @@ from polar_app.rr_pipeline import RRCleaningParams, RRCleaningResult, analyze_rr
 FC_CLEAN_WINDOW_SECONDS = 5.0
 FC_CLEAN_MIN_VIABLE_POINTS = 2
 FC_CLEAN_WINDOW_MODE = "trailing_seconds"
-RR_CLEAN_ALGO_VERSION = "3.1"
+RR_CLEAN_ALGO_VERSION = "3.3"
 
 
 def _session_start(session: ProcessedSession) -> datetime:

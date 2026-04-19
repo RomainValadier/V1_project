@@ -83,7 +83,7 @@
   ],
   "rr_clean_filepath": "clean\\20260402_100542\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260402_100542\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-07T13:57:05.047160",
+  "clean_export_timestamp": "2026-04-19T10:17:40.361960",
   "activity_family": "judo",
   "activity_label": "judo > randoris > randori_tw",
   "activity_notes": "Seance randoris surface 5*5",
@@ -160,7 +160,7 @@
   "activity_annotated_at": "2026-04-02T15:16:58.026692",
   "is_archived": false,
   "is_temporally_annotated": true,
-  "updated_at": "2026-04-07T14:27:34.270632",
+  "updated_at": "2026-04-19T10:29:43.197550",
   "fc_phase_segments": [
     {
       "segment_index": 0,
@@ -286,5 +286,127 @@
   "temporally_annotated_at": "2026-04-02T15:21:48.072901",
   "segment_type_version": 2,
   "description_synced_from_segmentation": false,
-  "description_synced_at": null
+  "description_synced_at": null,
+  "rr_manual_annotations": [
+    {
+      "source_index": 4760,
+      "t_offset_ms": 2520144,
+      "rr_interval_ms": 646.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 4761,
+      "t_offset_ms": 2520790,
+      "rr_interval_ms": 630.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 4762,
+      "t_offset_ms": 2521420,
+      "rr_interval_ms": 598.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 4763,
+      "t_offset_ms": 2522018,
+      "rr_interval_ms": 597.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:26:31.124361",
+      "updated_at": "2026-04-19T10:26:31.124361"
+    },
+    {
+      "source_index": 4764,
+      "t_offset_ms": 2522615,
+      "rr_interval_ms": 587.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:26:31.124361",
+      "updated_at": "2026-04-19T10:26:31.124361"
+    },
+    {
+      "source_index": 4765,
+      "t_offset_ms": 2523202,
+      "rr_interval_ms": 557.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:26:31.124361",
+      "updated_at": "2026-04-19T10:26:31.124361"
+    },
+    {
+      "source_index": 4770,
+      "t_offset_ms": 2525900,
+      "rr_interval_ms": 583.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:26:31.124361",
+      "updated_at": "2026-04-19T10:26:31.124361"
+    },
+    {
+      "source_index": 4774,
+      "t_offset_ms": 2528527,
+      "rr_interval_ms": 671.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 4775,
+      "t_offset_ms": 2529198,
+      "rr_interval_ms": 640.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:26:31.124361",
+      "updated_at": "2026-04-19T10:26:31.124361"
+    },
+    {
+      "source_index": 4776,
+      "t_offset_ms": 2529838,
+      "rr_interval_ms": 639.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 6169,
+      "t_offset_ms": 3168954,
+      "rr_interval_ms": 558.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 6171,
+      "t_offset_ms": 3170113,
+      "rr_interval_ms": 582.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 6172,
+      "t_offset_ms": 3170695,
+      "rr_interval_ms": 583.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:23:16.036931",
+      "updated_at": "2026-04-19T10:23:16.036931"
+    },
+    {
+      "source_index": 6173,
+      "t_offset_ms": 3171278,
+      "rr_interval_ms": 583.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:29:43.173981",
+      "updated_at": "2026-04-19T10:29:43.173981"
+    },
+    {
+      "source_index": 6174,
+      "t_offset_ms": 3171861,
+      "rr_interval_ms": 541.0,
+      "manual_flag": "manuel",
+      "created_at": "2026-04-19T10:29:43.173981",
+      "updated_at": "2026-04-19T10:29:43.173981"
+    }
+  ]
 }

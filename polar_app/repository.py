@@ -874,6 +874,102 @@ class ProcessedSessionRepository:
                     return False
         return True
 
+    def get_rr_manual_annotations(self, session_id: str) -> list[dict[str, Any]]:
+        meta = self._read_session_meta(session_id)
+        session, rr_frame, _ = self.load_session_data(session_id)
+        del session
+        max_index = len(rr_frame) - 1
+        annotations: list[dict[str, Any]] = []
+        seen_indices: set[int] = set()
+        for entry in meta.get("rr_manual_annotations") or []:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                source_index = int(entry.get("source_index"))
+            except (TypeError, ValueError):
+                continue
+            if source_index < 0 or source_index > max_index or source_index in seen_indices:
+                continue
+            seen_indices.add(source_index)
+            rr_value = float(rr_frame.iloc[source_index]["rr_interval_ms"]) if "rr_interval_ms" in rr_frame.columns else entry.get("rr_interval_ms")
+            t_offset = int(rr_frame.iloc[source_index]["t_offset_ms"]) if "t_offset_ms" in rr_frame.columns else entry.get("t_offset_ms")
+            annotations.append(
+                {
+                    "source_index": source_index,
+                    "t_offset_ms": t_offset,
+                    "rr_interval_ms": rr_value,
+                    "manual_flag": "manuel",
+                    "created_at": entry.get("created_at"),
+                    "updated_at": entry.get("updated_at"),
+                }
+            )
+        annotations.sort(key=lambda item: item["source_index"])
+        return annotations
+
+    def save_rr_manual_annotations(self, session_id: str, annotations: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        meta = self._read_session_meta(session_id)
+        normalized = self._normalize_rr_manual_annotations(session_id, annotations)
+        meta["rr_manual_annotations"] = normalized or None
+        meta["updated_at"] = datetime.now().isoformat()
+        self._write_session_meta(session_id, meta)
+        return normalized
+
+    def toggle_rr_manual_annotation(self, session_id: str, source_index: int) -> tuple[list[dict[str, Any]], bool]:
+        annotations = self.get_rr_manual_annotations(session_id)
+        existing = {int(item["source_index"]): dict(item) for item in annotations}
+        source_index = int(source_index)
+        if source_index in existing:
+            del existing[source_index]
+            updated = self.save_rr_manual_annotations(session_id, list(existing.values()))
+            return updated, False
+
+        session, rr_frame, _ = self.load_session_data(session_id)
+        del session
+        if source_index < 0 or source_index >= len(rr_frame):
+            raise ValueError(f"Indice RR manuel invalide : {source_index}")
+        now = datetime.now().isoformat()
+        existing[source_index] = {
+            "source_index": source_index,
+            "t_offset_ms": int(rr_frame.iloc[source_index]["t_offset_ms"]) if "t_offset_ms" in rr_frame.columns else None,
+            "rr_interval_ms": float(rr_frame.iloc[source_index]["rr_interval_ms"]) if "rr_interval_ms" in rr_frame.columns else None,
+            "manual_flag": "manuel",
+            "created_at": now,
+            "updated_at": now,
+        }
+        updated = self.save_rr_manual_annotations(session_id, list(existing.values()))
+        return updated, True
+
+    def apply_rr_manual_annotation_batch(self, session_id: str, source_indices: list[int]) -> list[dict[str, Any]]:
+        annotations = self.get_rr_manual_annotations(session_id)
+        existing = {int(item["source_index"]): dict(item) for item in annotations}
+        session, rr_frame, _ = self.load_session_data(session_id)
+        del session
+        now = datetime.now().isoformat()
+
+        for raw_index in source_indices:
+            try:
+                source_index = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            if source_index < 0 or source_index >= len(rr_frame):
+                continue
+            if source_index in existing:
+                del existing[source_index]
+                continue
+            existing[source_index] = {
+                "source_index": source_index,
+                "t_offset_ms": int(rr_frame.iloc[source_index]["t_offset_ms"]) if "t_offset_ms" in rr_frame.columns else None,
+                "rr_interval_ms": float(rr_frame.iloc[source_index]["rr_interval_ms"]) if "rr_interval_ms" in rr_frame.columns else None,
+                "manual_flag": "manuel",
+                "created_at": now,
+                "updated_at": now,
+            }
+
+        return self.save_rr_manual_annotations(session_id, list(existing.values()))
+
+    def clear_rr_manual_annotations(self, session_id: str) -> None:
+        self.save_rr_manual_annotations(session_id, [])
+
     def delete_session(self, session_id: str) -> None:
         for branch in ("raw", "processed"):
             target_dir = os.path.join(self.output_dir, branch, session_id)
@@ -917,6 +1013,37 @@ class ProcessedSessionRepository:
             return None
         text = str(value).strip()
         return text or None
+
+    def _normalize_rr_manual_annotations(self, session_id: str, value: Any) -> list[dict[str, Any]]:
+        session, rr_frame, _ = self.load_session_data(session_id)
+        del session
+        max_index = len(rr_frame) - 1
+        if not value:
+            return []
+        normalized: list[dict[str, Any]] = []
+        seen_indices: set[int] = set()
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                source_index = int(entry.get("source_index"))
+            except (TypeError, ValueError):
+                continue
+            if source_index < 0 or source_index > max_index or source_index in seen_indices:
+                continue
+            seen_indices.add(source_index)
+            normalized.append(
+                {
+                    "source_index": source_index,
+                    "t_offset_ms": int(rr_frame.iloc[source_index]["t_offset_ms"]) if "t_offset_ms" in rr_frame.columns else None,
+                    "rr_interval_ms": float(rr_frame.iloc[source_index]["rr_interval_ms"]) if "rr_interval_ms" in rr_frame.columns else None,
+                    "manual_flag": "manuel",
+                    "created_at": entry.get("created_at"),
+                    "updated_at": entry.get("updated_at") or datetime.now().isoformat(),
+                }
+            )
+        normalized.sort(key=lambda item: item["source_index"])
+        return normalized
 
     @staticmethod
     def _normalize_dict_list(value: Any) -> list[dict[str, Any]] | None:

@@ -304,8 +304,9 @@
   "session_rpe": 8,
   "rr_clean_filepath": "clean\\20260331_160349\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260331_160349\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-07T14:00:39.760028",
+  "clean_export_timestamp": "2026-04-18T15:57:12.973890",
   "segment_type_version": 2,
   "description_synced_from_segmentation": false,
-  "description_synced_at": null
+  "description_synced_at": null,
+  "rr_manual_annotations": null
 }

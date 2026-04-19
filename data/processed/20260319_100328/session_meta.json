@@ -70,7 +70,7 @@
   ],
   "rr_clean_filepath": "clean\\20260319_100328\\rr_clean.parquet",
   "fc_clean_filepath": "clean\\20260319_100328\\fc_clean.parquet",
-  "clean_export_timestamp": "2026-04-05T17:57:30.627963",
+  "clean_export_timestamp": "2026-04-18T16:20:26.813399",
   "activity_family": "judo",
   "activity_label": "judo > randoris > randori_tw",
   "activity_notes": null,
@@ -269,5 +269,6 @@
   "temporally_annotated_at": "2026-04-01T22:11:10.736142",
   "segment_type_version": 2,
   "description_synced_from_segmentation": false,
-  "description_synced_at": null
+  "description_synced_at": null,
+  "rr_manual_annotations": null
 }

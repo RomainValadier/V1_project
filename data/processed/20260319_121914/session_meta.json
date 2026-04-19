@@ -45,5 +45,6 @@
   "updated_at": "2026-04-01T22:14:24.741280",
   "segment_type_version": 2,
   "description_synced_from_segmentation": false,
-  "description_synced_at": null
+  "description_synced_at": null,
+  "rr_manual_annotations": null
 }

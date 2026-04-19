@@ -2,7 +2,7 @@
   "session_id": "20260402_100542",
   "source_rr_filepath": "processed\\20260402_100542\\rr.parquet",
   "source_hr_filepath": "processed\\20260402_100542\\hr.parquet",
-  "export_timestamp": "2026-04-07T13:57:05.047160",
+  "export_timestamp": "2026-04-19T10:17:40.361960",
   "fc_clean_window_seconds": 5.0,
   "fc_clean_window_mode": "trailing_seconds",
   "fc_clean_min_viable_points": 2,
@@ -10,7 +10,7 @@
   "non_viable_rr_total": 577,
   "global_non_ok_rate": 0.06166821040315897,
   "global_quality_label": "ALERTE",
-  "cleaning_algo_version": "3.1",
+  "cleaning_algo_version": "3.3",
   "params": {
     "rr_min_ms": 250,
     "rr_max_ms": 1500,

@@ -166,6 +166,9 @@ def migrate_processed_session_dict(data: dict[str, Any]) -> tuple[dict[str, Any]
     if "description_synced_at" not in migrated:
         migrated["description_synced_at"] = None
         changed = True
+    if "rr_manual_annotations" not in migrated:
+        migrated["rr_manual_annotations"] = None
+        changed = True
 
     return migrated, changed
 
@@ -231,6 +234,7 @@ class ProcessedSession:
     segment_type_version: int | None = SEGMENT_TYPE_VERSION
     description_synced_from_segmentation: bool | None = None
     description_synced_at: str | None = None
+    rr_manual_annotations: list[dict] | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProcessedSession":
@@ -290,4 +294,5 @@ class ProcessedSession:
             "segment_type_version": self.segment_type_version,
             "description_synced_from_segmentation": self.description_synced_from_segmentation,
             "description_synced_at": self.description_synced_at,
+            "rr_manual_annotations": self.rr_manual_annotations,
         }

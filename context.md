@@ -12,7 +12,7 @@ Rappel :
 - `changelog.md` sert d'historique detaille
 - en fin de session, `context.md` doit etre mis a jour
 
-Derniere mise a jour : 2026-04-11
+Derniere mise a jour : 2026-04-18
 
 ## But du document
 
@@ -81,10 +81,12 @@ Le CLI appelle `polar_app.cli.run_cli()` et peut importer ou afficher les seance
 
 ### Pipeline RR
 
-- La version courante de l'algo clean est `3.1` dans `polar_app/clean_export.py`.
+- La version courante de l'algo clean est `3.3` dans `polar_app/clean_export.py`.
 - Le pipeline produit une serie `RR_clean` enrichie avec labels, flags, corrections et indicateurs d'exploitabilite.
 - Les zones denses d'artefacts sont marquees separement.
 - Les coupures de plus de 60 secondes ne sont pas interpolees.
+- Les zones de chauffe post-reconnexion apres vraie deconnexion font partie des zones d'exclusion et ne doivent plus alimenter les indicateurs d'exploitabilite.
+- Exception : la chauffe apres cassure sur serie d'artefacts reste visible dans `RR clean` et peut encore alimenter la FC, mais pas le RMSSD.
 - Le recalage temporel du clean reutilise les timestamps Polar d'origine quand ils existent.
 - Les segments trop degradÃ©s sont exclus selon des seuils dependants de leur duree.
 - Les exports clean ecrivent au minimum :
@@ -142,31 +144,40 @@ Au debut d'une nouvelle session :
    - annotation activite
    - visualisation finale
    - autres
-4. Si le besoin touche le nettoyage RR, verifier si la version `3.1` doit rester valide ou etre incrementee.
+4. Si le besoin touche le nettoyage RR, verifier si la version `3.3` doit rester valide ou etre incrementee.
 
 ## A completer apres chaque session
 
 ### Objectif courant
 
-- Ajouter un nettoyage iteratif Lipponen experimental apres le pass 1 v3, avec recalcul des zones denses, relabellisation iterative et correction unique finale.
-- Etat : `polar_app/iterative_lipponen.py` a ete ajoute, `polar_app/rr_pipeline.py` expose maintenant un helper partage pour la decision Lipponen, et `pages/2_Nettoyage_RR.py` propose un toggle sidebar `Nettoyage iteratif Lipponen` avec ses parametres, ses marqueurs Altair par pass et un resume des passes.
+- Aligner la pipeline RR sur la nouvelle regle metier : seule la chauffe apres vraie deconnexion doit etre exclue ; la chauffe apres cassure sur serie d'artefacts doit rester visible et exploitable pour la FC.
+- Etat : `polar_app/rr_pipeline.py` exclut maintenant `post_reconnect_deco`, mais conserve `post_reconnect_artefact` dans `RR clean` avec exploitabilite FC sans exploitabilite RMSSD ; `polar_app/clean_export.py` est maintenant passe en version `3.3` pour forcer la recompilation des exports clean.
 
 ### Dernieres decisions actives
 
-- Pipeline RR versionnee en `3.1` tant que la decision de bump de version n'a pas ete prise.
+- Pipeline RR versionnee en `3.3`.
 - `Gestion activites` sert a l'edition.
 - `Visualisation activite` sert a la restitution finale.
+- Les zones de chauffe apres vraie deconnexion sont des zones exclues a part entiere.
+- Les zones `post_reconnect_artefact` ne sont pas exclues : elles restent visibles dans `RR clean`, contribuent a `fc_ok`, mais pas a `rmssd_ok`.
 - Le graphe `RR bruts` affiche une ligne continue des RR bruts, avec mise en avant des seuls labels non `ok`, des labels iteratifs par pass quand le mode iteratif est actif, et des labels 2 bis non `aucun`.
 - La post-classification 2 bis ne conserve plus que la passe A ; la passe B a ete retiree car elle reclassait a tort certains beats `court` en `ok`.
 - L'ordre experimental de calcul sur la page `Nettoyage RR` est maintenant : pass 1 standard -> iteration Lipponen -> passe A 2 bis.
+- Le flag `manuel` est une surcouche de revue locale persistante par seance ; il ne modifie pas l'algo automatique lui-meme et ne doit donc pas forcer de bump de version d'algo.
+- Les points marques `manuel` sont affiches comme `manuel` dans l'analyse, mais convertis en `long` uniquement au moment de relancer la correction aval.
+- La selection manuelle sur `RR bruts` est maintenant par lot : clics locaux sans rerun, puis validation explicite d'un ensemble de beats.
+- Le bloc automatique amont est maintenant cache par combinaison `session + params v3 + params iteratif + params 2 bis`, afin d'eviter de recalculer l'iteratif et le 2 bis a chaque validation manuelle.
+- `RR clean` n'utilise plus Altair pour l'affichage principal ; il passe par un composant Plotly local avec pan, scroll zoom, reset double-clic et plein ecran.
 
 ### Prochaine reprise conseillee
 
-- Verifier visuellement dans Streamlit le mode iteratif sur une seance reelle, en particulier la bosse autour de `49.3-49.6 min`, les marqueurs par pass, le resume des passes et la coexistence avec la passe A 2 bis.
-- Decider si l'ajout de l'iteratif et le retrait precedent de la passe B doivent faire passer la version de l'algo clean de `3.1` a `+0.1` ou `+1`.
+- Recompiler une ou plusieurs seances clean en `3.3` puis verifier dans Streamlit que `post_reconnect_deco` est bien exclu, tandis que `post_reconnect_artefact` reste visible sur `RR clean`.
+- Verifier sur les pages `FC clean vs Polar`, `Analyse RR` et `Bilan Qualite` que `post_reconnect_artefact` remonte bien la FC exploitable sans remonter le RMSSD exploitable.
+- Revalider ensuite la revue manuelle RR et le viewer `RR clean` plein ecran pour s'assurer que ces exclusions ne degradent pas le rendu du composant.
 
 ### Blocages / points a surveiller
 
 - Le Python systeme disponible dans le terminal ne charge pas `numpy/pandas`; la verification locale a pu etre faite en compilation uniquement, pas en smoke test complet avec execution numerique.
 - Le `.venv` present dans le depot pointe vers un interpreteur externe devenu invalide (`Python312`), donc il faut soit recreer le venv soit tester directement via l'environnement de dev habituel avant validation finale.
-- L'ajout de l'iteratif et le retrait precedent de la passe B modifient reellement la pipeline RR : il reste a decider s'il faut passer la version de l'algo en `+0.1` ou `+1`.
+- `git status` est bloque dans ce terminal par un `safe.directory` manquant sur `C:/5eme/stage/V1_project`, donc les inspections Git locales passent pour l'instant par lecture directe des fichiers.
+- Le cache de la page `Nettoyage RR` vit dans `st.session_state` et doit etre invalide par toute modification de seance ou de parametres ; si un comportement parait incoherent, verifier d'abord la cle de cache et les objets clones.

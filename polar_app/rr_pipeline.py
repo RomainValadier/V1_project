@@ -42,6 +42,8 @@ RUN_GAP_DECO = "gap_deco"
 RUN_GAP_ARTEFACT = "gap_artefact"
 RUN_POST_RECONNECT_DECO = "post_reconnect_deco"
 RUN_POST_RECONNECT_ARTEFACT = "post_reconnect_artefact"
+POST_RECONNECT_RUN_FLAGS = {RUN_POST_RECONNECT_DECO, RUN_POST_RECONNECT_ARTEFACT}
+EXCLUDED_POST_RECONNECT_RUN_FLAGS = {RUN_POST_RECONNECT_DECO}
 RUN_FLAG_ORDER = [RUN_OK, RUN_ARTEFACT_UNIQUE, RUN_COURT, RUN_MOYEN, RUN_LONG, RUN_GAP_DECO, RUN_GAP_ARTEFACT, RUN_POST_RECONNECT_DECO, RUN_POST_RECONNECT_ARTEFACT, RUN_NON_TRAITE]
 RUN_SERIES_FLAG_ORDER = [RUN_OK, RUN_SERIE]
 
@@ -563,7 +565,7 @@ def _is_gap_point(record: pd.Series) -> bool:
     return record["deco_flag"] in {DECO_GAP_COURT, DECO_GAP_LONG}
 
 def _is_non_ok_quality(record: pd.Series) -> bool:
-    return record["label"] in ARTIFACT_LABELS or record.get("run_series_flag", RUN_OK) == RUN_SERIE or record["run_flag"] in {RUN_POST_RECONNECT_DECO, RUN_POST_RECONNECT_ARTEFACT}
+    return record["label"] in ARTIFACT_LABELS or record.get("run_series_flag", RUN_OK) == RUN_SERIE or record["run_flag"] in POST_RECONNECT_RUN_FLAGS
 
 def _quality_segments(analysis: pd.DataFrame, final_segments: pd.DataFrame, initial_segments: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict] = []
@@ -593,7 +595,7 @@ def _global_quality(analysis: pd.DataFrame) -> tuple[float, str]:
     if analysis.empty:
         return 0.0, QUALITY_OK
     series_mask = analysis["run_series_flag"].eq(RUN_SERIE) if "run_series_flag" in analysis.columns else pd.Series(False, index=analysis.index)
-    non_ok = analysis["label"].ne(LABEL_OK) | series_mask | analysis["run_flag"].eq(RUN_POST_RECONNECT_ARTEFACT)
+    non_ok = analysis["label"].ne(LABEL_OK) | series_mask | analysis["run_flag"].isin(POST_RECONNECT_RUN_FLAGS)
     rate = float(non_ok.sum()) / float(len(analysis))
     return rate, _quality(rate)
 
@@ -662,7 +664,9 @@ def _exploitability(run_flag: str, run_series_flag: str, correction_flag: str) -
         return True, True, False, False
     if run_flag == RUN_MOYEN:
         return True, True, False, True
-    if run_flag in {RUN_POST_RECONNECT_DECO, RUN_POST_RECONNECT_ARTEFACT}:
+    if run_flag == RUN_POST_RECONNECT_DECO:
+        return False, False, False, False
+    if run_flag == RUN_POST_RECONNECT_ARTEFACT:
         return True, False, False, False
     if run_flag == RUN_GAP_DECO:
         return True, True, False, False
@@ -748,7 +752,12 @@ def _build_cleaned_frame(analysis: pd.DataFrame, quality_segments: pd.DataFrame,
             _append_clean_rows(clean_rows, [None], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_NOT_CLEANED, segment_final_id, segment_status, idx, idx)
             idx += 1
             continue
-        if run_flag in {RUN_OK, RUN_SERIE, RUN_POST_RECONNECT_DECO, RUN_POST_RECONNECT_ARTEFACT}:
+        if run_flag in EXCLUDED_POST_RECONNECT_RUN_FLAGS:
+            correction_raw[idx] = CORRECTION_NOT_CLEANED
+            _append_clean_rows(clean_rows, [None], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_NOT_CLEANED, segment_final_id, segment_status, idx, idx)
+            idx += 1
+            continue
+        if run_flag in {RUN_OK, RUN_SERIE, RUN_POST_RECONNECT_ARTEFACT}:
             correction_raw[idx] = CORRECTION_OK
             value = float(rr[idx]) if pd.notna(rr[idx]) and rr[idx] > 0 else None
             _append_clean_rows(clean_rows, [value], [ts.iloc[idx]], [float(offsets.iloc[idx]) if pd.notna(offsets.iloc[idx]) else np.nan], str(idx + 1), label, _aggregate_label_2bis(analysis, idx, idx), run_flag, run_series_flag, deco_flag, CORRECTION_OK, segment_final_id, segment_status, idx, idx)

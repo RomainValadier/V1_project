@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RR Manual Editor</title>
+  <script src="./plotly.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: Arial, sans-serif;
+      color: #13231a;
+    }
+    #root { padding: 6px 0 0 0; }
+    #banner {
+      margin: 0 0 8px 0;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(27, 67, 50, 0.12);
+      box-shadow: 0 8px 20px rgba(30, 41, 59, 0.06);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    #actions {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 8px 0;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .action-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #ffffff;
+      background: #173427;
+    }
+    .action-btn.secondary {
+      background: #475569;
+    }
+    .action-btn.danger {
+      background: #b91c1c;
+    }
+    .action-btn:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+    #chart-wrap {
+      position: relative;
+      width: 100%;
+      min-height: 360px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(27, 67, 50, 0.10);
+    }
+    #chart { width: 100%; height: 360px; }
+    #fullscreen-actions {
+      display: none;
+      padding: 8px;
+      text-align: right;
+      background: rgba(255,255,255,0.92);
+      border-top: 1px solid rgba(27, 67, 50, 0.10);
+    }
+    #fullscreen-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #ffffff;
+      background: #24533c;
+    }
+    #fullscreen-btn:hover {
+      background: #2f6b4d;
+    }
+    #footer-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #475569;
+    }
+    :fullscreen #chart-wrap,
+    :-webkit-full-screen #chart-wrap,
+    :-moz-full-screen #chart-wrap {
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+    }
+    :fullscreen #chart,
+    :-webkit-full-screen #chart,
+    :-moz-full-screen #chart {
+      height: calc(100vh - 64px);
+    }
+    :fullscreen #fullscreen-actions,
+    :-webkit-full-screen #fullscreen-actions,
+    :-moz-full-screen #fullscreen-actions {
+      display: block !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="banner">Chargement du graphe RR interactif...</div>
+    <div id="actions">
+      <button id="apply-btn" class="action-btn" type="button" disabled>Valider la sélection</button>
+      <button id="clear-pending-btn" class="action-btn secondary" type="button" disabled>Annuler la sélection</button>
+      <button id="clear-all-btn" class="action-btn danger" type="button" disabled>Effacer tous les flags manuels</button>
+      <button id="fullscreen-btn" type="button">Plein ??cran</button>
+      <span style="font-size:12px; margin-left:16px;">Axe Y :</span>
+      <input id="ymin-input" type="number" placeholder="min" style="width:60px; margin:0 4px;">
+      <input id="ymax-input" type="number" placeholder="max" style="width:60px; margin-right:4px;">
+      <button id="btn-yrange" type="button">Appliquer</button>
+      <button id="btn-yauto" type="button">Auto</button>
+    </div>
+    <div id="chart-wrap">
+      <div id="chart"></div>
+      <div id="fullscreen-actions" style="display:none; padding:8px; text-align:right;">
+        <button id="btn-valider-fs" type="button">✅ Valider la sélection</button>
+        <button id="btn-annuler-fs" type="button">✖ Annuler</button>
+      </div>
+    </div>
+    <div id="footer-note">Clique sur plusieurs points RR pour préparer un lot, puis valide la sélection en une fois.</div>
+  </div>
+
+  <script>
+    const LAYOUT_BASE = {
+      margin: { l: 56, r: 18, t: 18, b: 42 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      hovermode: 'closest',
+      showlegend: true,
+      uirevision: 'rr-editor-stable',
+      xaxis: {
+        title: 'Temps (min)',
+        zeroline: false,
+        gridcolor: 'rgba(148,163,184,0.18)',
+      },
+      yaxis: {
+        title: 'RR brut (ms)',
+        zeroline: false,
+        gridcolor: 'rgba(148,163,184,0.18)',
+        fixedrange: false,
+      },
+    };
+
+    const state = {
+      eventId: 0,
+      points: [],
+      chartTitle: 'RR bruts',
+      rrMax: 1800,
+      graphDiv: null,
+      lastClickStamp: 0,
+      pendingSelection: new Set(),
+    };
+    let gd = null;
+
+    const bannerEl = document.getElementById('banner');
+    const chartEl = document.getElementById('chart');
+    const applyBtnEl = document.getElementById('apply-btn');
+    const clearPendingBtnEl = document.getElementById('clear-pending-btn');
+    const clearAllBtnEl = document.getElementById('clear-all-btn');
+    const fullscreenBtnEl = document.getElementById('fullscreen-btn');
+    const yminInputEl = document.getElementById('ymin-input');
+    const ymaxInputEl = document.getElementById('ymax-input');
+    const btnYRangeEl = document.getElementById('btn-yrange');
+    const btnYAutoEl = document.getElementById('btn-yauto');
+    const btnValiderFsEl = document.getElementById('btn-valider-fs');
+    const btnAnnulerFsEl = document.getElementById('btn-annuler-fs');
+
+    function postMessageToStreamlit(type, data) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
+    }
+
+    function setFrameHeight(height) {
+      postMessageToStreamlit('streamlit:setFrameHeight', { height });
+    }
+
+    function setComponentValue(value) {
+      postMessageToStreamlit('streamlit:setComponentValue', { value });
+    }
+
+    function componentReady() {
+      postMessageToStreamlit('streamlit:componentReady', { apiVersion: 1 });
+    }
+
+    function pointHoverTemplate() {
+      return [
+        'Index %{customdata[0]}',
+        'Temps %{x:.3f} min',
+        'RR %{customdata[1]:.1f} ms',
+        'Label auto %{customdata[2]}',
+        'Label %{customdata[3]}',
+        'Flag manuel %{customdata[4]}',
+        '<extra></extra>'
+      ].join('<br>');
+    }
+
+    function makeScatterTrace(points, options) {
+      return {
+        type: 'scattergl',
+        mode: options.mode || 'markers',
+        name: options.name,
+        x: points.map(point => point.t_min == null ? null : Number(point.t_min)),
+        y: points.map(point => point.rr_plot_ms == null ? null : Number(point.rr_plot_ms)),
+        customdata: points.map(point => [
+          Number(point.source_index),
+          Number(point.rr_interval_ms),
+          String(point.label_auto || point.label || 'ok'),
+          String(point.label || 'ok'),
+          String(point.manual_flag || 'ok'),
+        ]),
+        marker: options.marker || undefined,
+        line: options.line || undefined,
+        hovertemplate: options.hovertemplate || pointHoverTemplate(),
+        showlegend: options.showlegend !== false,
+      };
+    }
+
+    function visiblePoints() {
+      return state.points.filter(point => Number.isFinite(point.t_min) && Number.isFinite(point.rr_plot_ms));
+    }
+
+    function groupPoints(filterFn) {
+      return visiblePoints().filter(filterFn);
+    }
+
+    function updateControls() {
+      const manualCount = state.points.filter(point => point.manual_flag === 'manuel').length;
+      const pendingCount = state.pendingSelection.size;
+      bannerEl.innerHTML = `<strong>RR bruts interactifs</strong> - ${state.points.length} points affichés, ${manualCount} point(s) annoté(s) manuellement, ${pendingCount} point(s) en attente.`;
+      applyBtnEl.disabled = pendingCount === 0;
+      clearPendingBtnEl.disabled = pendingCount === 0;
+      clearAllBtnEl.disabled = manualCount === 0;
+      btnValiderFsEl.disabled = pendingCount === 0;
+      btnAnnulerFsEl.disabled = pendingCount === 0;
+    }
+
+    function togglePending(sourceIndex) {
+      if (state.pendingSelection.has(sourceIndex)) {
+        state.pendingSelection.delete(sourceIndex);
+      } else {
+        state.pendingSelection.add(sourceIndex);
+      }
+      renderFigure();
+    }
+
+    function clearPendingSelection() {
+      state.pendingSelection.clear();
+      renderFigure();
+    }
+
+    function handleValider() {
+      if (!state.pendingSelection.size) {
+        return;
+      }
+      state.eventId += 1;
+      setComponentValue({
+        event_id: state.eventId,
+        event_type: 'apply_pending_selection',
+        source_indices: Array.from(state.pendingSelection.values()).sort((left, right) => left - right),
+      });
+    }
+
+    function handleAnnuler() {
+      clearPendingSelection();
+    }
+
+    function renderFigure() {
+      updateControls();
+      const traces = [];
+      const allVisiblePoints = visiblePoints();
+      traces.push({
+        type: 'scattergl',
+        mode: 'lines',
+        name: 'RR bruts',
+        x: allVisiblePoints.map(point => Number(point.t_min)),
+        y: allVisiblePoints.map(point => Number(point.rr_plot_ms)),
+        line: { color: '#9ca3af', width: 2 },
+        hoverinfo: 'skip',
+        showlegend: true,
+      });
+
+      const clickablePoints = makeScatterTrace(allVisiblePoints, {
+        name: 'Sélection',
+        marker: { size: 11, color: 'rgba(15,23,42,0.01)', line: { width: 0 } },
+        hovertemplate: pointHoverTemplate(),
+        showlegend: false,
+      });
+      traces.push(clickablePoints);
+
+      const nonOkLabels = [...new Set(allVisiblePoints.filter(point => point.label && point.label !== 'ok' && point.label !== 'manuel').map(point => point.label))];
+      const labelColors = {
+        artefact_absolu: '#dc2626',
+        manque: '#16a34a',
+        faux_battement: '#f59e0b',
+        long: '#2563eb',
+        court: '#0ea5e9',
+      };
+      nonOkLabels.forEach(label => {
+        const points = groupPoints(point => point.label === label);
+        traces.push(makeScatterTrace(points, {
+          name: `Label ${label}`,
+          marker: { size: 8, color: labelColors[label] || '#475569', line: { color: '#ffffff', width: 1 } },
+        }));
+      });
+
+      const manualPoints = groupPoints(point => point.manual_flag === 'manuel');
+      if (manualPoints.length) {
+        traces.push(makeScatterTrace(manualPoints, {
+          name: 'Flag manuel',
+          marker: { size: 15, color: '#ec4899', symbol: 'x', line: { color: '#ffffff', width: 1.2 } },
+        }));
+      }
+
+      const pendingPoints = groupPoints(point => state.pendingSelection.has(Number(point.source_index)));
+      if (pendingPoints.length) {
+        traces.push(makeScatterTrace(pendingPoints, {
+          name: 'Sélection en attente',
+          marker: { size: 14, color: '#111827', symbol: 'circle-open', line: { color: '#111827', width: 2.2 } },
+        }));
+      }
+
+      const iterativeGroups = [...new Set(allVisiblePoints.filter(point => Number(point.pass_detected || 0) >= 2).map(point => `Pass ${Number(point.pass_detected)}`))];
+      const iterativeStyle = {
+        'Pass 2': { color: '#f97316', symbol: 'triangle-up' },
+        'Pass 3': { color: '#eab308', symbol: 'diamond' },
+        'Pass 4': { color: '#84cc16', symbol: 'star' },
+        'Pass 5': { color: '#06b6d4', symbol: 'cross' },
+      };
+      iterativeGroups.forEach(passLabel => {
+        const points = groupPoints(point => `Pass ${Number(point.pass_detected)}` === passLabel);
+        const style = iterativeStyle[passLabel] || { color: '#64748b', symbol: 'circle' };
+        traces.push(makeScatterTrace(points, {
+          name: passLabel,
+          marker: { size: 13, color: style.color, symbol: style.symbol, line: { color: '#ffffff', width: 1.1 } },
+        }));
+      });
+
+      const twoBisGroups = [...new Set(allVisiblePoints.filter(point => point.label_2bis && point.label_2bis !== 'aucun').map(point => point.label_2bis))];
+      const twoBisStyle = {
+        '2bis_A': { color: '#8b5cf6', symbol: 'diamond' },
+        '2bis_B': { color: '#f472b6', symbol: 'triangle-up' },
+      };
+      twoBisGroups.forEach(label2bis => {
+        const points = groupPoints(point => point.label_2bis === label2bis);
+        const style = twoBisStyle[label2bis] || { color: '#8b5cf6', symbol: 'diamond' };
+        traces.push(makeScatterTrace(points, {
+          name: label2bis,
+          marker: { size: 11, color: style.color, symbol: style.symbol, line: { color: '#ffffff', width: 1 } },
+        }));
+      });
+
+      const layout = {
+        ...LAYOUT_BASE,
+        xaxis: { ...LAYOUT_BASE.xaxis },
+        yaxis: { ...LAYOUT_BASE.yaxis, range: [0, Number(state.rrMax) * 1.02] },
+      };
+
+      const config = {
+        responsive: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
+      };
+
+      const plotPromise = gd
+        ? Plotly.react(gd, traces, layout, config).then(() => gd)
+        : Plotly.newPlot(chartEl, traces, layout, config);
+
+      plotPromise.then(graphDiv => {
+        gd = graphDiv;
+        state.graphDiv = graphDiv;
+        graphDiv.removeAllListeners?.('plotly_click');
+        graphDiv.on('plotly_click', event => {
+          const point = event?.points?.[0];
+          if (!point || !Array.isArray(point.customdata)) {
+            return;
+          }
+          const now = Date.now();
+          if (now - state.lastClickStamp < 150) {
+            return;
+          }
+          state.lastClickStamp = now;
+          togglePending(Number(point.customdata[0]));
+        });
+        setFrameHeight(document.body.scrollHeight + 12);
+      });
+    }
+
+    function applyRenderArgs(args) {
+      state.points = Array.isArray(args.points) ? args.points : [];
+      state.chartTitle = String(args.chart_title || 'RR bruts');
+      state.rrMax = Number(args.rr_max || 1800);
+      state.pendingSelection.clear();
+      renderFigure();
+    }
+
+    applyBtnEl.addEventListener('click', handleValider);
+    clearPendingBtnEl.addEventListener('click', handleAnnuler);
+    btnValiderFsEl.addEventListener('click', handleValider);
+    btnAnnulerFsEl.addEventListener('click', handleAnnuler);
+
+    btnYRangeEl.addEventListener('click', () => {
+      const ymin = parseFloat(yminInputEl.value);
+      const ymax = parseFloat(ymaxInputEl.value);
+      if (gd && !isNaN(ymin) && !isNaN(ymax) && ymin < ymax) {
+        Plotly.relayout(gd, { 'yaxis.range': [ymin, ymax], 'yaxis.autorange': false });
+      }
+    });
+
+    btnYAutoEl.addEventListener('click', () => {
+      if (gd) {
+        Plotly.relayout(gd, { 'yaxis.autorange': true });
+      }
+    });
+
+    clearAllBtnEl.addEventListener('click', () => {
+      if (!state.points.some(point => point.manual_flag === 'manuel')) {
+        return;
+      }
+      state.eventId += 1;
+      setComponentValue({
+        event_id: state.eventId,
+        event_type: 'clear_all_manual_annotations',
+      });
+    });
+
+    if (fullscreenBtnEl) fullscreenBtnEl.addEventListener('click', () => {
+      const target = document.getElementById('chart-wrap');
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.();
+        return;
+      }
+      target.requestFullscreen?.();
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      if (gd) {
+        Plotly.Plots.resize(gd);
+      }
+      setTimeout(() => setFrameHeight(document.body.scrollHeight + 12), 80);
+    });
+
+    window.addEventListener('message', event => {
+      const data = event.data || {};
+      if (data.type !== 'streamlit:render') {
+        return;
+      }
+      applyRenderArgs(data.args || {});
+    });
+
+    window.addEventListener('load', () => {
+      componentReady();
+      setFrameHeight(document.body.scrollHeight + 12);
+    });
+  </script>
+</body>
+</html>

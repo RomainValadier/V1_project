@@ -285,6 +285,15 @@ def load_clean_meta(repository: ProcessedSessionRepository, session_id: str) -> 
         return json.load(file_obj)
 
 
+def clean_export_version(clean_meta: dict) -> str:
+    value = clean_meta.get("cleaning_algo_version") or clean_meta.get("algo_version") or ""
+    return str(value).strip()
+
+
+def is_clean_export_stale(clean_meta: dict) -> bool:
+    return clean_export_version(clean_meta) != RR_CLEAN_ALGO_VERSION
+
+
 def sessions_requiring_recompile(repository: ProcessedSessionRepository, sessions: list) -> list:
     stale_sessions = []
     for session in sessions:
@@ -292,7 +301,7 @@ def sessions_requiring_recompile(repository: ProcessedSessionRepository, session
             stale_sessions.append(session)
             continue
         clean_meta = load_clean_meta(repository, session.session_id)
-        if clean_meta.get("cleaning_algo_version") != RR_CLEAN_ALGO_VERSION:
+        if is_clean_export_stale(clean_meta):
             stale_sessions.append(session)
     return stale_sessions
 
@@ -478,8 +487,6 @@ def main() -> None:
         st.stop()
 
     params = RRCleaningParams()
-    stale_sessions = sessions_requiring_recompile(repository, sessions)
-    missing_count = len(stale_sessions)
     latest_session = sessions[-1]
     activity_session_map = build_activity_session_map(sessions)
     activity_options = list(activity_session_map.keys())
@@ -491,6 +498,8 @@ def main() -> None:
         selected_activity = st.selectbox("Activite", activity_options, key="analyse_rr_activity")
 
         activity_sessions = activity_session_map[selected_activity]
+        stale_activity_sessions = sessions_requiring_recompile(repository, activity_sessions)
+        missing_count = len(stale_activity_sessions)
         activity_labels, activity_label_to_id = build_session_options(activity_sessions)
         default_selected_session_id = (
             latest_session.session_id if get_activity_label(latest_session) == selected_activity else activity_sessions[-1].session_id
@@ -527,8 +536,10 @@ def main() -> None:
             active_session_id = None
             st.caption("Selectionne au moins une seance pour afficher les graphiques RR.")
 
+        st.caption(f"Version cible des exports clean : {RR_CLEAN_ALGO_VERSION}")
+
         if st.button(f"Compiler / recompiler les RR_clean a mettre a jour ({missing_count})", use_container_width=True):
-            exported, failed = compile_missing_clean(repository, sessions, params)
+            exported, failed = compile_missing_clean(repository, activity_sessions, params)
             if exported:
                 st.success(f"RR_clean generes pour {len(exported)} seance(s).")
             if failed:
