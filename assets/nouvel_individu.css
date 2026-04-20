@@ -1,0 +1,183 @@
+[data-testid="stAppViewContainer"] {
+    background:
+        radial-gradient(circle at top left, rgba(218, 165, 32, 0.10), transparent 30%),
+        radial-gradient(circle at top right, rgba(46, 139, 87, 0.10), transparent 28%),
+        linear-gradient(180deg, #f6f3ea 0%, #fbfaf7 52%, #f3f6f1 100%);
+}
+
+.block-container {
+    max-width: 1320px;
+    padding-top: 1.4rem;
+    padding-bottom: 2rem;
+}
+
+.new-individual-header {
+    padding: 1rem 1.2rem;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 248, 243, 0.94));
+    border: 1px solid rgba(46, 84, 61, 0.10);
+    box-shadow: 0 12px 36px rgba(41, 60, 47, 0.08);
+    margin-bottom: 1rem;
+}
+
+.new-individual-kicker {
+    color: #2d5f43;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin-bottom: 0.2rem;
+    text-transform: uppercase;
+}
+
+.new-individual-header h1 {
+    color: #163325;
+    font-size: 1.95rem;
+    font-weight: 750;
+    letter-spacing: 0;
+    line-height: 1.08;
+    margin: 0;
+}
+
+.new-individual-header p {
+    color: #526357;
+    font-size: 0.98rem;
+    margin: 0.35rem 0 0 0;
+}
+
+.section-chip {
+    display: inline-block;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(55, 110, 79, 0.10);
+    color: #2d5f43;
+    font-size: 0.8rem;
+    font-weight: 650;
+    margin: 0.4rem 0 0.65rem 0;
+}
+
+[data-testid="stTabs"] {
+    background: rgba(255, 255, 255, 0.66);
+    border: 1px solid rgba(33, 56, 42, 0.08);
+    border-radius: 16px;
+    padding: 0.7rem 0.8rem 0.9rem 0.8rem;
+    box-shadow: 0 10px 28px rgba(41, 60, 47, 0.06);
+    margin-bottom: 1rem;
+}
+
+[data-testid="stTab"] {
+    color: #2b3d31;
+    font-weight: 650;
+}
+
+div[data-testid="stDataFrame"] {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(33, 56, 42, 0.08);
+}
+
+.directory-header {
+    color: #667066;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin: 0.15rem 0 0.25rem 0;
+    text-transform: uppercase;
+}
+
+.directory-cell {
+    min-height: 2.55rem;
+    display: flex;
+    align-items: center;
+    color: #34463a;
+    font-size: 0.9rem;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid rgba(42, 67, 51, 0.07);
+}
+
+[data-testid="stTabs"] [data-testid="stButton"] button {
+    justify-content: flex-start;
+    min-height: 2.55rem;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(42, 67, 51, 0.10);
+    color: #173427;
+}
+
+[data-testid="stTabs"] [data-testid="stButton"] button:hover {
+    background: rgba(55, 110, 79, 0.10);
+    border-color: rgba(55, 110, 79, 0.24);
+    color: #173427;
+}
+
+.form-shell {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(245, 248, 242, 0.92));
+    border: 1px solid rgba(33, 56, 42, 0.10);
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(41, 60, 47, 0.07);
+    padding: 1rem 1.1rem 1.15rem 1.1rem;
+    margin-top: 0.2rem;
+}
+
+.form-section-title {
+    color: #173427;
+    font-size: 0.92rem;
+    font-weight: 750;
+    margin: 0.2rem 0 0.7rem 0;
+}
+
+.athlete-title {
+    color: #9a6b14;
+    margin-top: 1rem;
+}
+
+div[data-testid="stWidgetLabel"] label,
+label[data-testid="stWidgetLabel"],
+[data-testid="stWidgetLabel"] p {
+    color: #526357;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+[data-testid="stTextInput"] input,
+[data-testid="stDateInput"] input,
+[data-testid="stNumberInput"] input,
+[data-baseweb="select"] > div {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(42, 67, 51, 0.16);
+    border-radius: 12px;
+    color: #163325;
+}
+
+[data-testid="stTextInput"] input:focus,
+[data-testid="stDateInput"] input:focus,
+[data-testid="stNumberInput"] input:focus,
+[data-baseweb="select"] > div:focus-within {
+    border-color: #376e4f;
+    box-shadow: 0 0 0 1px rgba(55, 110, 79, 0.24);
+}
+
+[data-testid="stButton"] button,
+[data-testid="stFormSubmitButton"] button {
+    border-radius: 12px;
+    font-weight: 700;
+}
+
+[data-testid="stButton"] button[kind="primary"],
+[data-testid="stFormSubmitButton"] button {
+    background: linear-gradient(135deg, #376e4f, #244f38);
+    border: 1px solid rgba(36, 79, 56, 0.18);
+    color: #fff;
+}
+
+[data-testid="stButton"] button[kind="primary"]:hover,
+[data-testid="stFormSubmitButton"] button:hover {
+    border-color: rgba(36, 79, 56, 0.30);
+    color: #fff;
+    filter: brightness(1.04);
+}
+
+[data-testid="stForm"] {
+    border: 0;
+}
+
+[data-testid="stAlert"] {
+    border-radius: 14px;
+}
