@@ -2,6 +2,17 @@
 
 Ce fichier suit les modifications apportees au projet suite a tes demandes.
 
+## 2026-04-19
+
+### Migration SQLite v1.1
+
+- Ajout de `schema_v1_1.sql` dans le depot pour initialiser la BDD SQLite `projet_i.db` avec les tables sessions, acquisitions, clean meta, exploitabilite, randoris realises et RPE.
+- Adaptation du schema cible pour autoriser `athlete_b_id` nul dans `randoris_realises` et tracer les randoris issus des annotations FC avec `source_segmentation = annotation_fc`.
+- Ajout de `polar_app/db.py`, couche d'acces SQLite minimale avec `foreign_keys=ON`, `journal_mode=WAL`, commit/rollback contextuel et chemin par defaut vers `projet_i.db`.
+- Ajout de `migrate_to_db.py`, script idempotent avec `--dry-run`, `--db`, `--data-root` et `--schema`, migration de Romain Valadier comme athlete principal, conversion Europe/Paris vers UTC, normalisation canonique des labels, migration des chemins Parquet, stats clean, randoris FC et RPE par randori disponibles.
+- Initialisation locale de `projet_i.db` depuis le schema. Le dry-run detecte 15 sessions, 49 randoris issus de `fc_phase_segments`, 12 RPE par randori et 1 dossier clean orphelin ignore (`20260318_102514`).
+- Ajout de `pyarrow` dans `requirements.txt` pour expliciter le moteur Parquet necessaire a la migration et aux lectures `pandas.read_parquet`.
+
 ## 2026-04-18
 
 ### Pipeline RR / exploitabilite
@@ -257,3 +268,15 @@ andori effectivement annotes sur le graphe FC, plutot que la duree declaree dans
 - Verification effectuee : compilation Python reussie sur `polar_app/repository.py`, `polar_app/rr_manual_component.py`, `polar_app/rr_clean_component.py` et `pages/2_Nettoyage_RR.py`.
 - Correctif de serialization des payloads front : les valeurs `NaN` / non finies sont maintenant converties en `null` avant envoi vers les composants `RR bruts` et `RR clean`, pour eviter les erreurs JSON de type `Unexpected token 'N'`.
 - Correctif UX sur `frontend/rr_manual_editor/` : ajout d'un vrai bouton `Plein ecran` sur `RR bruts`, avec gestion du resize Plotly lors de l'entree / sortie du mode plein ecran.
+
+## 2026-04-19
+
+### Migration SQLite DB-first
+
+- Ajout du schema SQLite v1.1 avec `phases_realisees`, `phase_realisee_id` dans `randoris_realises`, `rr_manual_annotations`, `athlete_b_id` nullable et support de `retour_calme` dans les phases programmees.
+- Evolution de `migrate_to_db.py` : migration idempotente des `judo_phases` vers `phases_programmees`, des `fc_phase_segments` vers `phases_realisees`, creation des `randoris_realises` enfants pour les phases de type randori, migration des RPE par randori et des 43 annotations RR manuelles.
+- Ajout d'une reparation ciblee du schema derive des annotations temporelles pour reconstruire `phases_realisees` / `randoris_realises` / `rpe` si une ancienne migration SQLite a laisse une cle etrangere vers `phases_programmees_old`.
+- Bascule de `ProcessedSessionRepository` en lecture DB-first : liste des seances depuis SQLite, overlay des metadonnees principales, chemins Parquet, segmentation temporelle depuis `phases_realisees`, RPE depuis `rpe` et annotations RR manuelles depuis `rr_manual_annotations`.
+- Les ecritures metier du repository conservent les JSON historiques puis resynchronisent la seance dans SQLite via la migration ciblee : metadonnees activite, archive/restauration, export clean, segmentation FC, synchronisation segmentation -> description et annotations RR manuelles.
+- Verification effectuee : `migrate_to_db.py --dry-run` detecte 15 sessions, 117 phases realisees FC, 49 randoris, 12 RPE et 43 annotations RR manuelles ; deux migrations reelles consecutives conservent les memes compteurs.
+- Verification SQLite effectuee : `integrity_check=ok`, 0 randori sans `phase_realisee_id`, 117 phases avec `timing_annotation='post'`, 117 phases `source_annotation='annotation_fc'`, 7 RPE pour `20260407_154155` et 5 RPE pour `20260402_100542`.

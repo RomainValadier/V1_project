@@ -1,4 +1,6 @@
 pandas
+pyarrow
 plotly
 streamlit
 streamlit-calendar
+tzdata

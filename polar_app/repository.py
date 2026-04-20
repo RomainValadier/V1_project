@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from polar_app.db import get_db
 from polar_app.models import (
     SEGMENT_TYPE_VERSION,
     ProcessedSession,
@@ -37,21 +40,29 @@ class ProcessedSessionRepository:
 
     def __init__(self, output_dir: str) -> None:
         self.output_dir = output_dir
+        self.project_root = os.path.abspath(os.path.join(output_dir, os.pardir))
+        self.db_path = os.path.join(self.project_root, "projet_i.db")
         self.processed_root = os.path.join(output_dir, "processed")
         self.clean_root = os.path.join(output_dir, "clean")
+        self._db_fallback_warning_emitted = False
 
     def list_sessions(self, include_archived: bool = False) -> list[ProcessedSession]:
         sessions: list[ProcessedSession] = []
 
-        if not os.path.isdir(self.processed_root):
+        session_ids = self._db_session_ids(include_archived=include_archived)
+        if session_ids is None:
+            if not os.path.isdir(self.processed_root):
+                return sessions
+            session_ids = sorted(os.listdir(self.processed_root))
+        elif not os.path.isdir(self.processed_root):
             return sessions
 
-        for session_id in sorted(os.listdir(self.processed_root)):
+        for session_id in session_ids:
             meta_path = os.path.join(self.processed_root, session_id, "session_meta.json")
             if not os.path.isfile(meta_path):
                 continue
 
-            session = ProcessedSession.from_dict(self._read_session_meta(session_id))
+            session = ProcessedSession.from_dict(self._read_session_meta(session_id, prefer_db=True))
             clean_paths = self.get_clean_paths(session.session_id)
             if os.path.isfile(clean_paths["rr_clean_absolute"]):
                 session.rr_clean_filepath = clean_paths["rr_clean_relative"]
@@ -92,7 +103,7 @@ class ProcessedSessionRepository:
         return [sessions_map[session_id] for session_id in session_ids]
 
     def load_dataframe(self, filepath: str) -> pd.DataFrame:
-        absolute_path = os.path.join(self.output_dir, filepath)
+        absolute_path = self._resolve_data_path(filepath)
         extension = os.path.splitext(absolute_path)[1].lower()
 
         if extension == ".csv":
@@ -135,6 +146,7 @@ class ProcessedSessionRepository:
         if os.path.isfile(paths["clean_meta_absolute"]):
             with open(paths["clean_meta_absolute"], encoding="utf-8-sig") as file_obj:
                 clean_meta = json.load(file_obj)
+        clean_meta.update(self._db_clean_meta(session_id))
         return session, rr_clean, fc_clean, clean_meta
 
     def save_clean_export(
@@ -160,6 +172,7 @@ class ProcessedSessionRepository:
             processed_meta["clean_export_timestamp"] = clean_meta.get("export_timestamp")
             with open(processed_meta_path, "w", encoding="utf-8") as file_obj:
                 json.dump(processed_meta, file_obj, ensure_ascii=False, indent=2)
+        self._sync_session_to_db(session_id)
         return paths
 
     def update_annotation(self, session_id: str, annotation: str) -> None:
@@ -223,6 +236,7 @@ class ProcessedSessionRepository:
             meta["description_synced_at"] = description_synced_at if description_synced_from_segmentation else None
         meta["updated_at"] = now
         self._write_session_meta(session_id, meta)
+        self._sync_session_to_db(session_id)
 
     def archive_session(self, session_id: str) -> None:
         meta = self._read_session_meta(session_id)
@@ -231,6 +245,7 @@ class ProcessedSessionRepository:
         meta["archived_at"] = now
         meta["updated_at"] = now
         self._write_session_meta(session_id, meta)
+        self._sync_session_to_db(session_id)
 
     def restore_session(self, session_id: str) -> None:
         meta = self._read_session_meta(session_id)
@@ -238,6 +253,7 @@ class ProcessedSessionRepository:
         meta["archived_at"] = None
         meta["updated_at"] = datetime.now().isoformat()
         self._write_session_meta(session_id, meta)
+        self._sync_session_to_db(session_id)
 
     def build_calendar_events(
         self,
@@ -665,6 +681,7 @@ class ProcessedSessionRepository:
             meta["temporally_annotated_at"] = None
         meta["updated_at"] = datetime.now().isoformat()
         self._write_session_meta(session_id, meta)
+        self._sync_session_to_db(session_id)
         return normalized_segments
 
     def save_fc_phase_segments_for_edit(
@@ -812,6 +829,7 @@ class ProcessedSessionRepository:
         meta["updated_at"] = datetime.now().isoformat()
         meta["segment_type_version"] = SEGMENT_TYPE_VERSION
         self._write_session_meta(session_id, meta)
+        self._sync_session_to_db(session_id)
         return {"updated": True, "randori_count": total_randoris, "warnings": warnings}
 
     def _extract_randori_phase_groups(self, segments: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -875,6 +893,10 @@ class ProcessedSessionRepository:
         return True
 
     def get_rr_manual_annotations(self, session_id: str) -> list[dict[str, Any]]:
+        db_annotations = self._db_rr_manual_annotations(session_id)
+        if db_annotations is not None:
+            return db_annotations
+
         meta = self._read_session_meta(session_id)
         session, rr_frame, _ = self.load_session_data(session_id)
         del session
@@ -909,9 +931,11 @@ class ProcessedSessionRepository:
     def save_rr_manual_annotations(self, session_id: str, annotations: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         meta = self._read_session_meta(session_id)
         normalized = self._normalize_rr_manual_annotations(session_id, annotations)
+        self._replace_rr_manual_annotations_db(session_id, normalized)
         meta["rr_manual_annotations"] = normalized or None
         meta["updated_at"] = datetime.now().isoformat()
         self._write_session_meta(session_id, meta)
+        self._sync_session_to_db(session_id)
         return normalized
 
     def toggle_rr_manual_annotation(self, session_id: str, source_index: int) -> tuple[list[dict[str, Any]], bool]:
@@ -979,19 +1003,391 @@ class ProcessedSessionRepository:
     def _meta_path(self, session_id: str) -> str:
         return os.path.join(self.processed_root, session_id, "session_meta.json")
 
-    def _read_session_meta(self, session_id: str) -> dict[str, Any]:
+    def _read_session_meta(self, session_id: str, prefer_db: bool = False) -> dict[str, Any]:
         meta_path = self._meta_path(session_id)
         with open(meta_path, encoding="utf-8-sig") as file_obj:
             meta = json.load(file_obj)
         migrated_meta, changed = migrate_processed_session_dict(meta)
         if changed:
             self._write_session_meta(session_id, migrated_meta)
+        if prefer_db:
+            migrated_meta = self._overlay_db_session_meta(session_id, migrated_meta)
         return migrated_meta
 
     def _write_session_meta(self, session_id: str, meta: dict[str, Any]) -> None:
         meta_path = self._meta_path(session_id)
         with open(meta_path, "w", encoding="utf-8") as file_obj:
             json.dump(meta, file_obj, ensure_ascii=False, indent=2)
+
+    def _resolve_data_path(self, filepath: str) -> str:
+        if os.path.isabs(filepath):
+            return filepath
+        candidates = [
+            os.path.join(self.output_dir, filepath),
+            os.path.join(self.project_root, filepath),
+        ]
+        output_name = os.path.basename(os.path.normpath(self.output_dir))
+        normalized = os.path.normpath(filepath)
+        prefix = output_name + os.sep
+        if normalized.startswith(prefix):
+            candidates.append(os.path.join(self.project_root, normalized))
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        return candidates[0]
+
+    def _db_available(self) -> bool:
+        if not os.path.isfile(self.db_path):
+            self._emit_db_fallback_warning("BDD SQLite absente")
+            return False
+        try:
+            with get_db(self.db_path) as conn:
+                required_tables = {"sessions", "acquisitions", "phases_realisees", "rr_manual_annotations"}
+                existing = {
+                    row["name"]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+                missing = required_tables - existing
+                if missing:
+                    self._emit_db_fallback_warning(
+                        "BDD SQLite incomplete, tables manquantes : " + ", ".join(sorted(missing))
+                    )
+                    return False
+                return True
+        except sqlite3.Error as exc:
+            self._emit_db_fallback_warning(f"BDD SQLite illisible : {exc}")
+            return False
+
+    def _emit_db_fallback_warning(self, message: str) -> None:
+        if self._db_fallback_warning_emitted:
+            return
+        print(f"[ProcessedSessionRepository] Fallback JSON lecture seule : {message}")
+        self._db_fallback_warning_emitted = True
+
+    def _db_session_ids(self, include_archived: bool) -> list[str] | None:
+        if not self._db_available():
+            return None
+        try:
+            with get_db(self.db_path) as conn:
+                where_clause = "" if include_archived else "WHERE is_archived = 0"
+                rows = conn.execute(
+                    f"""
+                    SELECT id
+                    FROM sessions
+                    {where_clause}
+                    ORDER BY date_seance, heure_debut_reelle, id
+                    """
+                ).fetchall()
+                return [str(row["id"]) for row in rows]
+        except sqlite3.Error as exc:
+            self._emit_db_fallback_warning(f"lecture sessions impossible : {exc}")
+            return None
+
+    def _overlay_db_session_meta(self, session_id: str, meta: dict[str, Any]) -> dict[str, Any]:
+        if not self._db_available():
+            return meta
+        try:
+            with get_db(self.db_path) as conn:
+                row = conn.execute(
+                    """
+                    SELECT
+                        s.id, s.date_seance, s.heure_debut_reelle, s.type_seance,
+                        s.activity_family, s.activity_notes, s.is_archived, s.archived_at,
+                        s.is_temporally_annotated, s.notes,
+                        sa.rpe_global_seance,
+                        a.device_id, a.nb_rr_bruts, a.nb_points_hr, a.duree_s,
+                        a.segments_count, a.gaps_count, a.rr_raw_filepath, a.hr_raw_filepath,
+                        rcm.export_timestamp AS clean_export_timestamp
+                    FROM sessions s
+                    LEFT JOIN session_athletes sa ON sa.session_id = s.id
+                    LEFT JOIN acquisitions a ON a.session_id = s.id
+                    LEFT JOIN rr_clean_meta rcm ON rcm.acquisition_id = a.id
+                    WHERE s.id = ?
+                    LIMIT 1
+                    """,
+                    (session_id,),
+                ).fetchone()
+                if row is None:
+                    return meta
+
+                updated = dict(meta)
+                updated["session_id"] = str(row["id"])
+                updated["date"] = row["date_seance"] or updated.get("date")
+                updated["heure_debut"] = row["heure_debut_reelle"] or updated.get("heure_debut")
+                updated["activity_family"] = row["activity_family"]
+                updated["activity_notes"] = row["activity_notes"]
+                updated["is_archived"] = bool(row["is_archived"])
+                updated["archived_at"] = row["archived_at"]
+                updated["is_temporally_annotated"] = bool(row["is_temporally_annotated"])
+                updated["annotation"] = row["notes"] or updated.get("annotation")
+                updated["session_rpe"] = row["rpe_global_seance"]
+                updated["device_id"] = row["device_id"] or updated.get("device_id")
+                updated["nb_battements_rr"] = row["nb_rr_bruts"] or updated.get("nb_battements_rr")
+                updated["nb_points_hr"] = row["nb_points_hr"] or updated.get("nb_points_hr")
+                updated["duree_s"] = row["duree_s"] or updated.get("duree_s")
+                updated["segments_count"] = row["segments_count"]
+                updated["gaps_count"] = row["gaps_count"]
+                updated["rr_filepath"] = row["rr_raw_filepath"] or updated.get("rr_filepath")
+                updated["hr_filepath"] = row["hr_raw_filepath"] or updated.get("hr_filepath")
+                updated["clean_export_timestamp"] = row["clean_export_timestamp"] or updated.get("clean_export_timestamp")
+
+                type_seance = row["type_seance"]
+                if row["activity_family"] == "judo" and type_seance in {"randori_tw", "randori_nw", "randori_mixte"}:
+                    updated["judo_session_type"] = "randoris"
+                    updated["activity_label"] = f"judo > randoris > {type_seance}"
+                elif row["activity_family"] == "judo" and type_seance == "technique":
+                    updated["judo_session_type"] = "technique"
+                    updated["activity_label"] = "judo > technique"
+
+                indicator_paths = {
+                    str(item["indicator_type"]): item["filepath"]
+                    for item in conn.execute(
+                        """
+                        SELECT rif.indicator_type, rif.filepath
+                        FROM rr_indicator_files rif
+                        JOIN acquisitions a ON a.id = rif.acquisition_id
+                        WHERE a.session_id = ?
+                        """,
+                        (session_id,),
+                    ).fetchall()
+                }
+                updated["rr_clean_filepath"] = indicator_paths.get("rr_clean") or updated.get("rr_clean_filepath")
+                updated["fc_clean_filepath"] = indicator_paths.get("fc_clean") or updated.get("fc_clean_filepath")
+                updated["fc_phase_segments"] = self._db_fc_phase_segments(conn, session_id, updated)
+                updated["rr_manual_annotations"] = self._db_rr_manual_annotations_from_conn(conn, session_id)
+                updated["judo_randori_blocks"] = self._overlay_rpe_blocks_from_db(
+                    conn,
+                    session_id,
+                    updated.get("judo_randori_blocks"),
+                )
+                return updated
+        except sqlite3.Error as exc:
+            self._emit_db_fallback_warning(f"lecture metadata session impossible : {exc}")
+            return meta
+
+    def _db_fc_phase_segments(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        meta: dict[str, Any],
+    ) -> list[dict[str, Any]] | None:
+        rows = conn.execute(
+            """
+            SELECT ordre, type_phase, t_debut_utc_ms, t_fin_utc_ms, duree_reelle_s,
+                   source_annotation, source_segment_index, notes
+            FROM phases_realisees
+            WHERE session_id = ?
+            ORDER BY ordre
+            """,
+            (session_id,),
+        ).fetchall()
+        if not rows:
+            return None
+
+        start_ms = None
+        acquisition_row = conn.execute(
+            "SELECT start_time_utc FROM acquisitions WHERE session_id=? LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        if acquisition_row and acquisition_row["start_time_utc"]:
+            start_text = str(acquisition_row["start_time_utc"]).replace("Z", "+00:00")
+            start_ms = int(datetime.fromisoformat(start_text).timestamp() * 1000)
+        if start_ms is None:
+            start_dt = self.get_session_start(ProcessedSession.from_dict(meta))
+            start_ms = int(start_dt.timestamp() * 1000) if start_dt is not None else int(rows[0]["t_debut_utc_ms"])
+
+        segments: list[dict[str, Any]] = []
+        for fallback_index, row in enumerate(rows):
+            source_index = row["source_segment_index"]
+            segment_index = int(source_index) if source_index is not None else int(row["ordre"]) - 1
+            start_offset_s = (int(row["t_debut_utc_ms"]) - start_ms) / 1000.0
+            end_offset_s = (int(row["t_fin_utc_ms"]) - start_ms) / 1000.0
+            notes: dict[str, Any] = {}
+            if row["notes"]:
+                try:
+                    notes = json.loads(row["notes"])
+                except json.JSONDecodeError:
+                    notes = {}
+            segments.append(
+                {
+                    "segment_index": segment_index,
+                    "label": row["type_phase"],
+                    "start_offset_s": round(start_offset_s, 3),
+                    "end_offset_s": round(end_offset_s, 3),
+                    "duration_s": round(float(row["duree_reelle_s"] or end_offset_s - start_offset_s), 3),
+                    "source": row["source_annotation"] or notes.get("source") or "annotation_fc",
+                    "locked": bool(notes.get("locked", False)),
+                    "phase_uid": notes.get("phase_uid"),
+                }
+            )
+        return sorted(segments, key=lambda item: (int(item["segment_index"]), item["start_offset_s"]))
+
+    def _overlay_rpe_blocks_from_db(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        blocks: Any,
+    ) -> list[dict[str, Any]] | None:
+        if not blocks:
+            return None
+        rpe_rows = conn.execute(
+            """
+            SELECT rr.numero_randori, r.rpe_ressenti
+            FROM rpe r
+            JOIN randoris_realises rr ON rr.id = r.randori_id
+            WHERE rr.session_id = ?
+            """,
+            (session_id,),
+        ).fetchall()
+        rpe_by_number = {int(row["numero_randori"]): row["rpe_ressenti"] for row in rpe_rows}
+        if not rpe_by_number:
+            return blocks
+
+        cursor = 0
+        updated_blocks: list[dict[str, Any]] = []
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            item = dict(block)
+            entries: list[dict[str, Any]] = []
+            for entry in item.get("randori_entries") or []:
+                if not isinstance(entry, dict):
+                    continue
+                cursor += 1
+                entry_item = dict(entry)
+                if cursor in rpe_by_number:
+                    entry_item["rpe"] = rpe_by_number[cursor]
+                entries.append(entry_item)
+            item["randori_entries"] = entries or item.get("randori_entries")
+            updated_blocks.append(item)
+        return updated_blocks or None
+
+    def _db_rr_manual_annotations_from_conn(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+    ) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            """
+            SELECT source_index, t_offset_ms, rr_interval_ms, manual_flag, created_at, updated_at
+            FROM rr_manual_annotations
+            WHERE session_id = ?
+            ORDER BY source_index
+            """,
+            (session_id,),
+        ).fetchall()
+        return [
+            {
+                "source_index": int(row["source_index"]),
+                "t_offset_ms": row["t_offset_ms"],
+                "rr_interval_ms": row["rr_interval_ms"],
+                "manual_flag": row["manual_flag"] or "manuel",
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+
+    def _db_rr_manual_annotations(self, session_id: str) -> list[dict[str, Any]] | None:
+        if not self._db_available():
+            return None
+        try:
+            with get_db(self.db_path) as conn:
+                return self._db_rr_manual_annotations_from_conn(conn, session_id)
+        except sqlite3.Error as exc:
+            self._emit_db_fallback_warning(f"lecture annotations RR impossible : {exc}")
+            return None
+
+    def _replace_rr_manual_annotations_db(self, session_id: str, annotations: list[dict[str, Any]]) -> None:
+        if not self._db_available():
+            return
+        try:
+            with get_db(self.db_path) as conn:
+                conn.execute("DELETE FROM rr_manual_annotations WHERE session_id = ?", (session_id,))
+                for entry in annotations:
+                    conn.execute(
+                        """
+                        INSERT INTO rr_manual_annotations (
+                            session_id, source_index, t_offset_ms, rr_interval_ms,
+                            manual_flag, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            session_id,
+                            int(entry["source_index"]),
+                            entry.get("t_offset_ms"),
+                            entry.get("rr_interval_ms"),
+                            entry.get("manual_flag") or "manuel",
+                            entry.get("created_at"),
+                            entry.get("updated_at"),
+                        ),
+                    )
+        except sqlite3.Error as exc:
+            self._emit_db_fallback_warning(f"ecriture annotations RR impossible : {exc}")
+
+    def _db_clean_meta(self, session_id: str) -> dict[str, Any]:
+        if not self._db_available():
+            return {}
+        try:
+            with get_db(self.db_path) as conn:
+                row = conn.execute(
+                    """
+                    SELECT rcm.export_timestamp, rcm.ok_rr_total, rcm.global_quality_label
+                    FROM rr_clean_meta rcm
+                    JOIN acquisitions a ON a.id = rcm.acquisition_id
+                    WHERE a.session_id = ?
+                    LIMIT 1
+                    """,
+                    (session_id,),
+                ).fetchone()
+                if row is None:
+                    return {}
+                return {
+                    "export_timestamp": row["export_timestamp"],
+                    "ok_rr_total": row["ok_rr_total"],
+                    "global_quality_label": row["global_quality_label"],
+                }
+        except sqlite3.Error as exc:
+            self._emit_db_fallback_warning(f"lecture clean_meta impossible : {exc}")
+            return {}
+
+    def _sync_session_to_db(self, session_id: str) -> None:
+        if not os.path.isfile(self.db_path):
+            self._emit_db_fallback_warning("BDD SQLite absente pour synchronisation")
+            return
+        session_dir = Path(self.processed_root) / session_id
+        if not (session_dir / "session_meta.json").exists():
+            return
+        try:
+            from migrate_to_db import (
+                DEFAULT_SCHEMA_PATH,
+                ensure_schema_compatible,
+                initialize_schema,
+                migrate_session,
+                repair_derived_timing_schema,
+                upsert_athlete,
+            )
+
+            with get_db(self.db_path) as conn:
+                schema_path = DEFAULT_SCHEMA_PATH if DEFAULT_SCHEMA_PATH.exists() else Path(self.project_root) / "schema_v1_1.sql"
+                initialize_schema(conn, schema_path)
+                repair_derived_timing_schema(conn, schema_path)
+                ensure_schema_compatible(conn)
+                repair_derived_timing_schema(conn, schema_path)
+                ensure_schema_compatible(conn)
+                upsert_athlete(conn, dry_run=False)
+                migrate_session(
+                    conn,
+                    session_dir,
+                    Path(self.output_dir).resolve(),
+                    Path(self.project_root).resolve(),
+                    dry_run=False,
+                )
+        except Exception as exc:
+            self._emit_db_fallback_warning(f"synchronisation SQLite impossible : {exc}")
 
     def _session_total_duration_seconds(self, session: ProcessedSession, hr_frame: pd.DataFrame | None = None) -> float:
         if hr_frame is not None and not hr_frame.empty and "t_offset_ms" in hr_frame.columns:

@@ -12,7 +12,7 @@ Rappel :
 - `changelog.md` sert d'historique detaille
 - en fin de session, `context.md` doit etre mis a jour
 
-Derniere mise a jour : 2026-04-18
+Derniere mise a jour : 2026-04-19
 
 ## But du document
 
@@ -67,6 +67,8 @@ Le CLI appelle `polar_app.cli.run_cli()` et peut importer ou afficher les seance
 - `liste_activite.txt` : referentiel des types d'activite
 - `seance_judo_phase.txt` : referentiel des phases judo
 - `changelog.md` : historique detaille des evolutions
+- `schema_v1_1.sql` : schema SQLite cible v1.1 pour la migration BDD
+- `migrate_to_db.py` : script de migration fichiers locaux -> SQLite
 
 ## Etat fonctionnel courant
 
@@ -150,12 +152,20 @@ Au debut d'une nouvelle session :
 
 ### Objectif courant
 
-- Aligner la pipeline RR sur la nouvelle regle metier : seule la chauffe apres vraie deconnexion doit etre exclue ; la chauffe apres cassure sur serie d'artefacts doit rester visible et exploitable pour la FC.
-- Etat : `polar_app/rr_pipeline.py` exclut maintenant `post_reconnect_deco`, mais conserve `post_reconnect_artefact` dans `RR clean` avec exploitabilite FC sans exploitabilite RMSSD ; `polar_app/clean_export.py` est maintenant passe en version `3.3` pour forcer la recompilation des exports clean.
+- Basculer le modele de donnees vers SQLite DB-first avec une table `phases_realisees`, tout en conservant les JSON comme copie historique/fallback.
+- Etat : `schema_v1_1.sql`, `polar_app/db.py`, `migrate_to_db.py` et `projet_i.db` sont en place. La migration reelle est idempotente et remplit 15 sessions, 15 acquisitions, 28 phases programmees, 117 phases realisees FC, 49 randoris realises, 12 RPE par randori et 43 annotations RR manuelles. Le clean orphelin `20260318_102514` reste ignore avec log.
+- `ProcessedSessionRepository` lit maintenant SQLite en priorite pour la liste des seances, les metadonnees principales, les chemins Parquet, la segmentation temporelle, les RPE par randori et les annotations RR manuelles. Les ecritures metier conservent une copie JSON puis resynchronisent la seance dans SQLite.
 
 ### Dernieres decisions actives
 
 - Pipeline RR versionnee en `3.3`.
+- La migration SQLite conserve les fichiers Parquet/TXT comme source des signaux ; la BDD stocke metadonnees, chemins, stats clean, phases programmees, phases realisees, randoris realises, RPE et annotations RR manuelles.
+- Les segments temporels observes sont stockes d'abord dans `phases_realisees` avec `source_annotation = annotation_fc` et `timing_annotation = post`.
+- Les randoris derives des annotations FC sont des lignes enfant de `phases_realisees` via `randoris_realises.phase_realisee_id`, avec `source_segmentation = annotation_fc`.
+- Les annotations RR manuelles sont stockees dans la table `rr_manual_annotations` car elles representent une decision utilisateur persistante distincte des artefacts Parquet clean.
+- `athlete_b_id` peut rester `NULL` quand l'adversaire n'est pas renseigne.
+- L'athlete principal migre est Romain Valadier (`romain_valadier`, 64 kg, 165 cm, M, 2002-07-20, `romanopic@gmail.com`).
+- Les timestamps Polar sans timezone sont interpretes comme Europe/Paris puis convertis en UTC pour la BDD.
 - `Gestion activites` sert a l'edition.
 - `Visualisation activite` sert a la restitution finale.
 - Les zones de chauffe apres vraie deconnexion sont des zones exclues a part entiere.
@@ -171,13 +181,13 @@ Au debut d'une nouvelle session :
 
 ### Prochaine reprise conseillee
 
-- Recompiler une ou plusieurs seances clean en `3.3` puis verifier dans Streamlit que `post_reconnect_deco` est bien exclu, tandis que `post_reconnect_artefact` reste visible sur `RR clean`.
-- Verifier sur les pages `FC clean vs Polar`, `Analyse RR` et `Bilan Qualite` que `post_reconnect_artefact` remonte bien la FC exploitable sans remonter le RMSSD exploitable.
-- Revalider ensuite la revue manuelle RR et le viewer `RR clean` plein ecran pour s'assurer que ces exclusions ne degradent pas le rendu du composant.
+- Tester les pages Streamlit en interaction reelle : modification de metadonnees, segmentation FC, annotations RR, archive/restauration.
+- Verifier apres chaque action que SQLite change bien, puis que les JSON restent une copie coherente.
+- Si la bascule DB-first est stable, reduire progressivement les lectures JSON restantes aux seuls cas de fallback ou aux champs pas encore normalises en BDD.
 
 ### Blocages / points a surveiller
 
-- Le Python systeme disponible dans le terminal ne charge pas `numpy/pandas`; la verification locale a pu etre faite en compilation uniquement, pas en smoke test complet avec execution numerique.
-- Le `.venv` present dans le depot pointe vers un interpreteur externe devenu invalide (`Python312`), donc il faut soit recreer le venv soit tester directement via l'environnement de dev habituel avant validation finale.
-- `git status` est bloque dans ce terminal par un `safe.directory` manquant sur `C:/5eme/stage/V1_project`, donc les inspections Git locales passent pour l'instant par lecture directe des fichiers.
+- Le Python systeme disponible dans le terminal ne charge pas correctement `numpy/pandas`; utiliser `.\.venv\Scripts\python.exe` pour les migrations et verifications Parquet.
+- Les commandes Git doivent etre lancees avec `-c safe.directory=C:/5eme/stage/V1_project` dans ce terminal.
 - Le cache de la page `Nettoyage RR` vit dans `st.session_state` et doit etre invalide par toute modification de seance ou de parametres ; si un comportement parait incoherent, verifier d'abord la cle de cache et les objets clones.
+- La migration reelle lit `rr_clean.parquet` pour remplir `rr_clean_exploitabilite`; elle necessite donc un environnement Python ou `pandas.read_parquet` fonctionne.
